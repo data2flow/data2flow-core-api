@@ -149,8 +149,8 @@ public final class SourceConfigValidator {
             }
         }
         if (SourceModels.AUTH_HEADER.equals(auth)) {
-            String scheme = url == null ? "" : url.toLowerCase(Locale.ROOT);
-            if (!scheme.startsWith("ws://") && !scheme.startsWith("wss://")) {
+            String scheme = url == null ? "" : url.strip().toLowerCase(Locale.ROOT);
+            if (url != null && checkUrl(url) && !scheme.startsWith("ws://") && !scheme.startsWith("wss://")) {
                 // HTTP 헤더 인증은 WebSocket(ws·wss) 업그레이드 요청에만 실을 수 있다
                 throw new BusinessException(SourceErrorCode.SOURCE_AUTH_UNSUPPORTED,
                         List.of(new FieldErrorDetail("connection.auth", "WEBSOCKET_ONLY", null)));

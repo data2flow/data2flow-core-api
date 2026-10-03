@@ -9,6 +9,7 @@ import net.java21.data2flow.core.source.domain.SourceErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -67,6 +68,7 @@ public class SourceLiveRelay implements DisposableBean {
     private final ScheduledExecutorService scheduler;
     private final Duration pingInterval;
 
+    @Autowired
     public SourceLiveRelay(IngressClient ingress, SourceQueryService queries, RoleChecker roleChecker, JsonMapper json, Clock clock) {
         this(ingress, queries, roleChecker, json, clock, PING_INTERVAL);
     }
