@@ -33,7 +33,11 @@ public final class CatalogDtos {
 
     /** 모델 패키지(API-DEV-42) 응답 조각 */
     public record PackageDto(String transformScriptId, String decodeScriptId, String driverKey, String defaultDashboardId,
-                             List<String> defaultRuleTemplateIds, JsonNode attributeSchema) {
+                             List<String> defaultRuleTemplateIds, JsonNode attributeSchema, String driverId, String encoderScriptId) {
+        public PackageDto(String transformScriptId, String decodeScriptId, String driverKey, String defaultDashboardId,
+                          List<String> defaultRuleTemplateIds, JsonNode attributeSchema) {
+            this(transformScriptId, decodeScriptId, driverKey, defaultDashboardId, defaultRuleTemplateIds, attributeSchema, null, null);
+        }
     }
 
     /** 모델 상세(API-DEV-40·41·46·47) */

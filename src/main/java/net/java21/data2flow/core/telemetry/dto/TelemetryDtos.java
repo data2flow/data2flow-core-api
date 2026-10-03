@@ -72,7 +72,16 @@ public final class TelemetryDtos {
     }
 
     /** API-TSD-05 상태 구간 */
-    public record StateIntervalResponse(Instant from, Instant to, Double value, String label, Object source) {
+    /**
+     * API-TSD-05 상태 구간. 측정 항목(상태형)은 value가 숫자, 액추에이터({@code actuator=true}, TSD-01.03)는 속성 값(문자열·불리언·숫자)과
+     * {@code capability}·{@code attribute}, 출처 {@code source{type, id}}가 붙는다.
+     */
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    public record StateIntervalResponse(Instant from, Instant to, Object value, String label, Object source, String capability,
+                                        String attribute) {
+        public StateIntervalResponse(Instant from, Instant to, Double value, String label, Object source) {
+            this(from, to, (Object) value, label, source, null, null);
+        }
     }
 
     /** API-TSD-08 통신 품질 점(게이트웨이별). 게이트웨이 정보가 없으면 gatewayEui null */

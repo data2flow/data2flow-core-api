@@ -9,6 +9,8 @@ import net.java21.data2flow.contracts.error.FieldErrorDetail;
 import net.java21.data2flow.contracts.identity.CurrentUser;
 import net.java21.data2flow.contracts.web.CursorListApiResponse;
 import net.java21.data2flow.contracts.web.CursorParams;
+import net.java21.data2flow.core.control.repository.CommandHistoryRepository;
+import net.java21.data2flow.core.control.repository.CommandHistoryRepository.StateRow;
 import net.java21.data2flow.core.telemetry.domain.AggFunction;
 import net.java21.data2flow.core.telemetry.domain.BucketGrid;
 import net.java21.data2flow.core.telemetry.domain.FillMode;
@@ -78,12 +80,15 @@ public class TelemetryQueryService {
     private static final TypeReference<Map<String, Object>> MAP = new TypeReference<>() { };
 
     private final TelemetryQueryRepository repository;
+    private final CommandHistoryRepository actuatorHistory;
     private final RoleChecker roleChecker;
     private final JsonMapper json;
     private final Clock clock;
 
-    public TelemetryQueryService(TelemetryQueryRepository repository, RoleChecker roleChecker, JsonMapper json, Clock clock) {
+    public TelemetryQueryService(TelemetryQueryRepository repository, CommandHistoryRepository actuatorHistory, RoleChecker roleChecker,
+                                 JsonMapper json, Clock clock) {
         this.repository = repository;
+        this.actuatorHistory = actuatorHistory;
         this.roleChecker = roleChecker;
         this.json = json;
         this.clock = clock;
@@ -423,7 +428,7 @@ public class TelemetryQueryService {
         DeviceInfo device = repository.findDevice(orgId, deviceId).orElseThrow(() -> new BusinessException(TelemetryErrorCode.DEVICE_NOT_FOUND));
         roleChecker.requireSpace(device.spaceId(), TelemetryErrorCode.DEVICE_NOT_FOUND);
         if (Boolean.TRUE.equals(actuator)) {
-            return List.of();
+            return actuatorIntervals(orgId, device.id(), from, to);
         }
         String key = metricKeys(metric == null ? null : List.of(metric)).getFirst();
         ResolutionPlanner.plan(Resolution.RAW, from, to, now, true, () -> 0);
@@ -446,6 +451,41 @@ public class TelemetryQueryService {
             i = j;
         }
         return intervals;
+    }
+
+    /**
+     * TSD-01.03 액추에이터 상태 구간: action의 {@code device_state_history}(속성별 구간). 끝나지 않은 구간은 조회 끝(지금 이전)까지로
+     * 자르고, 출처는 {@code {type, id}}(플로우·사용자·예약·장면, BR-TSD-22)로 줄인다.
+     */
+    private List<StateIntervalResponse> actuatorIntervals(long orgId, long deviceId, Instant from, Instant to) {
+        Instant now = clock.instant();
+        Instant end = to.isAfter(now) ? now : to;
+        List<StateIntervalResponse> result = new ArrayList<>();
+        for (StateRow row : actuatorHistory.listStateIntervals(orgId, deviceId, from, to, ResolutionPlanner.MAX_POINTS)) {
+            Instant start = row.validFrom().isBefore(from) ? from : row.validFrom();
+            Instant until = row.validTo() == null || row.validTo().isAfter(end) ? end : row.validTo();
+            Object value = row.value() == null ? null : json.readValue(row.value(), Object.class);
+            String label = row.label() != null ? row.label() : row.capability() + "." + row.attribute() + "=" + value;
+            result.add(new StateIntervalResponse(start, until, value, label, actuatorSource(row.source()), row.capability(),
+                    row.attribute()));
+        }
+        return result;
+    }
+
+    private Map<String, Object> actuatorSource(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        Map<String, Object> source = json.readValue(raw, MAP);
+        Object type = source.get("type");
+        Object id = source.get("flowId") != null ? source.get("flowId") : source.get("scheduleId") != null ? source.get("scheduleId")
+                : source.get("sceneRunId") != null ? source.get("sceneRunId") : source.get("userId");
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put("type", type);
+        if (id != null) {
+            out.put("id", String.valueOf(id));
+        }
+        return out;
     }
 
     private static String label(Map<String, Object> labels, Double value) {

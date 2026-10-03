@@ -56,7 +56,8 @@ public class CoreEventPublisher {
         return config(ConfigChangedMessage.delete(type, id, version, organizationId, clock));
     }
 
-    private ConfigChangedMessage config(ConfigChangedMessage message) {
+    /** 이미 만든 설정 변경 메시지(ID가 숫자가 아닌 대상: 플로우 UUID, 조직 설정 {@code control} 등) */
+    public ConfigChangedMessage config(ConfigChangedMessage message) {
         outbox.message(Long.parseLong(message.orgId()), "CONFIG", MessagingNames.EXCHANGE_CONFIG, "",
                 message.messageId().toString(), codec.writeAsString(message));
         return message;

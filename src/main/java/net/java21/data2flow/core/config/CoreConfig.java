@@ -16,7 +16,7 @@ import java.time.Clock;
 
 /** core-api 공통 빈: 시계, 비밀번호 해시, Flyway 실행 방식 */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(CoreProperties.class)
+@EnableConfigurationProperties({CoreProperties.class, LoopProperties.class})
 public class CoreConfig {
 
     /** 운영 코드는 이 시계만 쓴다(ArchUnit NO_SYSTEM_CLOCK). 테스트는 MutableClock으로 바꾼다 */

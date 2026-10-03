@@ -72,9 +72,15 @@ public class DeviceModelService {
     private final Audits audits;
     private final JsonMapper json;
     private final Clock clock;
+    private final net.java21.data2flow.core.control.repository.DriverRepository driverBindings;
+    private final net.java21.data2flow.core.control.service.CapabilityService capabilityCatalog;
 
     public DeviceModelService(DeviceModelRepository models, MetricRepository metrics, ModelAttributeSchemaValidator schemas,
-                              RoleChecker roleChecker, CatalogEvents events, Audits audits, JsonMapper json, Clock clock) {
+                              RoleChecker roleChecker, CatalogEvents events, Audits audits, JsonMapper json, Clock clock,
+                              net.java21.data2flow.core.control.repository.DriverRepository driverBindings,
+                              net.java21.data2flow.core.control.service.CapabilityService capabilityCatalog) {
+        this.driverBindings = driverBindings;
+        this.capabilityCatalog = capabilityCatalog;
         this.models = models;
         this.metrics = metrics;
         this.schemas = schemas;
@@ -376,10 +382,15 @@ public class DeviceModelService {
     private String capabilitiesJson(List<CapabilityDto> raw) {
         ArrayNode array = json.createArrayNode();
         Set<String> seen = new LinkedHashSet<>();
+        var catalog = raw == null || raw.isEmpty() ? null : capabilityCatalog.catalog(roleChecker.currentUser().organizationId());
         for (CapabilityDto dto : raw == null ? List.<CapabilityDto>of() : raw) {
             String name = dto == null || dto.capability() == null ? "" : dto.capability().strip();
             if (name.isEmpty() || name.length() > 60) {
                 throw Patch.invalid("capabilities", "Size", "1~60");
+            }
+            // ACT-01.03: 모델 지원 기능은 카탈로그(표준 7종 + 조직 custom.*)에 있어야 한다
+            if (catalog != null && catalog.find(name).isEmpty()) {
+                throw Patch.invalid("capabilities", "CAPABILITY_NOT_SUPPORTED", name);
             }
             if (seen.add(name)) {
                 ObjectNode item = array.addObject();
@@ -442,8 +453,10 @@ public class DeviceModelService {
 
     private PackageDto packageOf(DeviceModel m) {
         JsonNode schema = m.attributeSchemaJson() == null ? null : json.readTree(m.attributeSchemaJson());
+        var binding = driverBindings.findBinding(m.organizationId(), m.id()).orElse(null);
         return new PackageDto(str(m.transformScriptId()), str(m.decodeScriptId()), m.driverKey(), str(m.defaultDashboardId()),
-                m.defaultRuleTemplateIds().stream().map(String::valueOf).toList(), schema);
+                m.defaultRuleTemplateIds().stream().map(String::valueOf).toList(), schema,
+                binding == null ? null : Long.toString(binding.driverId()), binding == null ? null : str(binding.encoderScriptId()));
     }
 
     private static String str(Long id) {

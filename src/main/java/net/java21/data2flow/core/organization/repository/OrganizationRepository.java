@@ -52,6 +52,12 @@ public class OrganizationRepository {
         return orgs.size() == 1 ? Optional.of(orgs.get(0)) : Optional.empty();
     }
 
+    /** ACTIVE 조직 ID 전체(배포 조직 코드를 정하지 않은 경우의 내부 전체 조회) */
+    @OrganizationScopeExempt("조직 목록 자체를 읽는다")
+    public java.util.List<Long> listActiveIds() {
+        return jdbc.sql("SELECT id FROM data2flow_core.organizations WHERE status = 'ACTIVE' ORDER BY id").query(Long.class).list();
+    }
+
     public long insert(String code, String name, String timezone, String locale) {
         return jdbc.sql("""
                         INSERT INTO data2flow_core.organizations (code, name, timezone, locale)

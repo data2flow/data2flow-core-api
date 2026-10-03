@@ -19,3 +19,6 @@ data2flow:
     # 공용 DB에 기본 카탈로그를 쓰지 않는다(조직 생성·운영 배포가 채운다)
     catalog:
       seed-on-startup: false
+    # 공용 DB에 가상 환경 기본값을 쓰지 않는다
+    loop:
+      seed-on-startup: false
