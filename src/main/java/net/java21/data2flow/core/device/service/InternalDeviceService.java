@@ -102,10 +102,16 @@ public class InternalDeviceService {
         int s = size == null || size < 1 ? PageParams.DEFAULT_SIZE : Math.min(size, MAX_PAGE);
         PageParams params = new PageParams(p, s);
         OptionalLong org = deployment.restriction();
-        List<ChangedDevice> items = internal.listChanged(org, statuses, after, s, params.offset()).stream()
-                .map(d -> new ChangedDevice(Long.toString(d.id()), Long.toString(d.organizationId()), Long.toString(d.sourceId()),
-                        d.externalId(), d.status(), DeviceViews.id(d.modelId()), DeviceViews.id(d.spaceId()), d.virtual(), d.version(),
-                        d.updatedAt()))
+        var rows = internal.listChanged(org, statuses, after, s, params.offset());
+        var defaults = internal.runtimeDefaults(rows.stream().map(d -> d.id()).toList());
+        List<ChangedDevice> items = rows.stream()
+                .map(d -> {
+                    var x = defaults.getOrDefault(d.id(), InternalDeviceRepository.RuntimeDefaults.NONE);
+                    return new ChangedDevice(Long.toString(d.id()), Long.toString(d.organizationId()), Long.toString(d.sourceId()),
+                            d.externalId(), d.status(), DeviceViews.id(d.modelId()), DeviceViews.id(d.spaceId()), d.virtual(), d.version(),
+                            d.updatedAt(), d.expectedIntervalSec(), d.offlineMultiplier() == null ? null : d.offlineMultiplier().doubleValue(),
+                            x.modelExpectedIntervalSec(), x.modelOfflineMultiplier(), x.timezone());
+                })
                 .toList();
         return ListApiResponse.of(params, items, internal.countChanged(org, statuses, after));
     }

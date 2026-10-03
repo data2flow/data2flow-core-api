@@ -140,4 +140,34 @@ class DeviceAttributeIT extends IntegrationTestSupport {
         mvc.perform(get("/internal/core/devices").param("status", "GONE")).andExpect(status().isBadRequest());
         mvc.perform(get("/internal/core/devices").param("updatedAfter", "yesterday")).andExpect(status().isBadRequest());
     }
+
+    @Test
+    @DisplayName("[DEV-02.01][BR-DEV-08] API-DEV-120·130 선택 필드: 기기 보고 주기·배수, 모델 기본값, 사이트 시간대(숫자는 JSON 숫자), 없으면 생략")
+    void runtimeDefaultsForPipeline() throws Exception {
+        jdbc.sql("UPDATE data2flow_core.devices SET expected_interval_sec = 60, offline_multiplier = 2.5 WHERE id = :d").param("d", device).update();
+        jdbc.sql("UPDATE data2flow_core.device_models SET default_interval_sec = 900, default_offline_multiplier = 4.0 WHERE id = :m")
+                .param("m", model).update();
+        jdbc.sql("UPDATE data2flow_core.spaces SET timezone = 'Asia/Tokyo' WHERE organization_id = :o AND type = 'SITE'").param("o", org).update();
+        long source = jdbc.sql("SELECT source_id FROM data2flow_core.devices WHERE id = :d").param("d", device).query(Long.class).single();
+        long bare = data.device(org, source, "b2", "PENDING", null, null);
+        mvc.perform(get("/internal/core/sources/" + source + "/devices/a1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.response.expectedIntervalSec").value(60))
+                .andExpect(jsonPath("$.response.offlineMultiplier").value(2.5))
+                .andExpect(jsonPath("$.response.modelExpectedIntervalSec").value(900))
+                .andExpect(jsonPath("$.response.modelOfflineMultiplier").value(4.0))
+                .andExpect(jsonPath("$.response.timezone").value("Asia/Tokyo"));
+        mvc.perform(get("/internal/core/sources/" + source + "/devices/b2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.response.deviceId").value(Long.toString(bare)))
+                .andExpect(jsonPath("$.response.modelExpectedIntervalSec").doesNotExist())
+                .andExpect(jsonPath("$.response.timezone").doesNotExist());
+        mvc.perform(get("/internal/core/devices").param("status", "ACTIVE"))
+                .andExpect(jsonPath("$.responses[0].deviceId").value(Long.toString(device)))
+                .andExpect(jsonPath("$.responses[0].expectedIntervalSec").value(60))
+                .andExpect(jsonPath("$.responses[0].offlineMultiplier").value(2.5))
+                .andExpect(jsonPath("$.responses[0].modelExpectedIntervalSec").value(900))
+                .andExpect(jsonPath("$.responses[0].modelOfflineMultiplier").value(4.0))
+                .andExpect(jsonPath("$.responses[0].timezone").value("Asia/Tokyo"));
+    }
 }

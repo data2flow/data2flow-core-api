@@ -29,9 +29,13 @@ public final class DiscoveryDtos {
     public record AutoRegisterResponse(String deviceId, String status, boolean created) {
     }
 
-    /** API-DEV-120 응답. 무시 목록에만 있으면(기기 없음·삭제) deviceId·status가 null이고 ignored=true */
+    /**
+     * API-DEV-120 응답. 무시 목록에만 있으면(기기 없음·삭제) deviceId·status가 null이고 ignored=true. 선택 필드는 API-DEV-130과 같다
+     * ({@code expectedIntervalSec}·{@code offlineMultiplier}·{@code modelExpectedIntervalSec}·{@code modelOfflineMultiplier}·{@code timezone})
+     */
     public record DeviceLookupResponse(String deviceId, String status, String organizationId, String modelId, String spaceId,
-                                       boolean virtual, boolean ignored) {
+                                       boolean virtual, boolean ignored, Integer expectedIntervalSec, Double offlineMultiplier,
+                                       Integer modelExpectedIntervalSec, Double modelOfflineMultiplier, String timezone) {
     }
 
     /** API-ING-16 요청 */

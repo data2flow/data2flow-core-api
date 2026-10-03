@@ -19,6 +19,7 @@ import net.java21.data2flow.core.device.dto.DiscoveryDtos.AutoRegisterResponse;
 import net.java21.data2flow.core.device.dto.DiscoveryDtos.DeviceLookupResponse;
 import net.java21.data2flow.core.device.dto.DiscoveryDtos.QuotaResetRequest;
 import net.java21.data2flow.core.device.dto.DiscoveryDtos.QuotaResponse;
+import net.java21.data2flow.core.device.repository.InternalDeviceRepository;
 import net.java21.data2flow.core.device.repository.DeviceReferenceRepository;
 import net.java21.data2flow.core.device.repository.DeviceRepository;
 import net.java21.data2flow.core.device.repository.DeviceRepository.NewDevice;
@@ -78,10 +79,14 @@ public class DeviceDiscoveryService {
     private final TransactionTemplate tx;
     private final Clock clock;
 
+    private final InternalDeviceRepository internalDevices;
+
     public DeviceDiscoveryService(DeviceRepository devices, DeviceReferenceRepository refs, DiscoveryRepository discovery,
                                   DeviceEvents events, SpaceSuggestion suggestion, DeploymentOrganization deployment,
                                   RoleChecker roleChecker, CoreEventPublisher publisher, ConfigVersions configVersions, Audits audits,
-                                  JsonMapper json, PlatformTransactionManager txManager, Clock clock) {
+                                  JsonMapper json, PlatformTransactionManager txManager, Clock clock,
+                                  InternalDeviceRepository internalDevices) {
+        this.internalDevices = internalDevices;
         this.devices = devices;
         this.refs = refs;
         this.discovery = discovery;
@@ -191,10 +196,14 @@ public class DeviceDiscoveryService {
             if (!ignored) {
                 throw new BusinessException(DeviceErrorCode.DEVICE_NOT_FOUND);
             }
-            return new DeviceLookupResponse(null, null, Long.toString(org), null, null, false, true);
+            return new DeviceLookupResponse(null, null, Long.toString(org), null, null, false, true, null, null, null, null, null);
         }
+        var x = internalDevices.runtimeDefaults(List.of(device.id()))
+                .getOrDefault(device.id(), InternalDeviceRepository.RuntimeDefaults.NONE);
         return new DeviceLookupResponse(Long.toString(device.id()), device.status(), Long.toString(org), DeviceViews.id(device.modelId()),
-                DeviceViews.id(device.spaceId()), device.virtual(), ignored);
+                DeviceViews.id(device.spaceId()), device.virtual(), ignored, device.expectedIntervalSec(),
+                device.offlineMultiplier() == null ? null : device.offlineMultiplier().doubleValue(),
+                x.modelExpectedIntervalSec(), x.modelOfflineMultiplier(), x.timezone());
     }
 
     /** API-ING-16 자동 등록 한도 해제(ADMIN, OPS_MANAGE). 새 한도를 주면 소스 설정도 바꾼다 */

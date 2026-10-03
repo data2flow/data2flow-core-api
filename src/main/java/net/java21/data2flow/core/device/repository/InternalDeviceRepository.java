@@ -56,6 +56,40 @@ public class InternalDeviceRepository {
                 .query(Long.class).single();
     }
 
+    /**
+     * API-DEV-120·130 선택 필드(BR-DEV-08 오프라인 판정, BR-TSD-05 1d 집계): 모델 기본 보고 주기·오프라인 배수와 사이트 시간대.
+     * 시간대는 기기 공간의 조상 중 가장 가까운 SITE의 값(없으면 null).
+     */
+    @OrganizationScopeExempt("내부 API-DEV-120·130: 이미 배포 조직으로 좁힌 기기 ID로만 읽는다")
+    public java.util.Map<Long, RuntimeDefaults> runtimeDefaults(java.util.Collection<Long> deviceIds) {
+        java.util.Map<Long, RuntimeDefaults> out = new java.util.HashMap<>();
+        if (deviceIds.isEmpty()) {
+            return out;
+        }
+        jdbc.sql("""
+                        SELECT d.id, m.default_interval_sec, m.default_offline_multiplier,
+                               (SELECT st.timezone FROM data2flow_core.spaces sp
+                                  JOIN data2flow_core.spaces st ON st.organization_id = sp.organization_id AND st.type = 'SITE'
+                                       AND st.timezone IS NOT NULL AND (sp.path LIKE '%/' || st.id || '/%' OR st.id = sp.id)
+                                 WHERE sp.id = d.space_id ORDER BY st.depth DESC LIMIT 1) AS timezone
+                          FROM data2flow_core.devices d
+                          LEFT JOIN data2flow_core.device_models m ON m.id = d.model_id AND m.organization_id = d.organization_id
+                         WHERE d.id = ANY(CAST(:ids AS bigint[]))""")
+                .param("ids", Pg.bigintArray(deviceIds))
+                .query((rs, n) -> {
+                    java.math.BigDecimal mult = rs.getBigDecimal("default_offline_multiplier");
+                    out.put(rs.getLong("id"), new RuntimeDefaults((Integer) rs.getObject("default_interval_sec"),
+                            mult == null ? null : mult.doubleValue(), rs.getString("timezone")));
+                    return null;
+                }).list();
+        return out;
+    }
+
+    /** 모델 기본값과 사이트 시간대. 없으면 null */
+    public record RuntimeDefaults(Integer modelExpectedIntervalSec, Double modelOfflineMultiplier, String timezone) {
+        public static final RuntimeDefaults NONE = new RuntimeDefaults(null, null, null);
+    }
+
     /** 기기·모델에 연결된 TRANSFORM 스크립트(script_bindings, WP-D 소유 — 읽기만). [scope, scriptId, versionNo] */
     public List<Object[]> findTransformBindings(long organizationId, long deviceId, Long modelId) {
         return jdbc.sql("""
