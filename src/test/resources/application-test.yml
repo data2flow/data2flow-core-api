@@ -1,0 +1,22 @@
+# 테스트 프로필(design/testing/backend.md §2). 인프라 주소는 @DynamicPropertySource로 Testcontainers 값을 넣는다.
+# 실제 s3·s4 인프라에는 붙지 않는다. 비밀값은 고정 더미다.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:1/never-used
+  rabbitmq:
+    host: localhost
+    port: 1
+    virtual-host: /
+data2flow:
+  secrets:
+    master-keys: test1:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+  core:
+    flyway-mode: migrate
+    web-base-url: https://web.test
+    outbox:
+      relay-enabled: false
+    jobs:
+      enabled: false
+logging:
+  level:
+    net.java21.data2flow: INFO

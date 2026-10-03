@@ -1,5 +1,6 @@
 package net.java21.data2flow.core;
 
+import net.java21.data2flow.core.support.IntegrationTestSupport;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * OPS-01(지표), NFR-06(무중단 배포의 프로브 전제)
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "management.server.port=0")
-class ActuatorEndpointsIT {
+class ActuatorEndpointsIT extends IntegrationTestSupport {
 
     @LocalManagementPort
     int managementPort;
