@@ -1,4 +1,12 @@
-# 로컬 개발. 인프라는 s3 SSH 터널·공용 개발 DB로 붙는다(design/deployment.md §8.2). 비밀값은 루트 .env
+# 로컬 개발. 인프라는 s3 SSH 터널·공용 개발 DB로 붙는다(design/deployment.md §8.2). 비밀값은 루트 .env를 셸에 읽어 둔다
+# (set -a; source ../.env; set +a). 공용 DB이므로 Flyway는 validate만 한다(ADR-030). 아웃박스·정리 작업은 끈다:
+# 로컬이 운영과 같은 DB의 아웃박스를 대신 보내거나 정리하지 않게 한다.
 logging:
   level:
     net.java21.data2flow: DEBUG
+data2flow:
+  core:
+    outbox:
+      relay-enabled: false
+    jobs:
+      enabled: false

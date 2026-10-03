@@ -25,6 +25,10 @@
         <tomcat.version>11.0.26</tomcat.version>
         <jackson-bom.version>3.1.7</jackson-bom.version>
         <data2flow-contracts.version>0.1.0-SNAPSHOT</data2flow-contracts.version>
+        <!-- Argon2id(IAM-02.01): Spring Security crypto가 BouncyCastle 구현을 쓴다. Bouncy Castle Licence(MIT 계열, ADR-018 허용) -->
+        <bouncycastle.version>1.86</bouncycastle.version>
+        <!-- 테스트 SMTP 서버(초대·재설정 메일 검증). Apache-2.0 -->
+        <greenmail.version>2.1.14</greenmail.version>
     </properties>
 
     <!-- data2flow-contracts·data2flow-bom은 GitHub Packages에 있다. 읽기에도 토큰이 필요하다(README 참고) -->
@@ -70,6 +74,49 @@
             <artifactId>micrometer-registry-prometheus</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- DB: JdbcClient + Flyway(스키마 data2flow_core). PostgreSQL 배열·inet·jsonb·파티션을 SQL로 직접 다룬다 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- 이벤트 아웃박스 릴레이(data2flow.events, ADR-020) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+        <!-- 초대·재설정·가입 신청 메일(OPS-07.02 메일 서버 설정으로 보냄) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <!-- Argon2id 해시(IAM-02.01). spring-security-crypto만 쓰고 Spring Security 필터 체인은 쓰지 않는다(auth.md §7) -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>${bouncycastle.version}</version>
+        </dependency>
+        <!-- TOTP 비밀값 Base32(IAM-02.05). Apache-2.0 -->
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -80,6 +127,54 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-webmvc-test</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.java21.data2flow</groupId>
+            <artifactId>data2flow-contracts-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-rabbitmq</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.icegreen</groupId>
+            <artifactId>greenmail-junit5</artifactId>
+            <version>${greenmail.version}</version>
+            <scope>test</scope>
+            <exclusions>
+                <!-- Boot가 넣는 jakarta.mail-api + angus-mail과 겹친다 -->
+                <exclusion>
+                    <groupId>org.eclipse.angus</groupId>
+                    <artifactId>jakarta.mail</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 

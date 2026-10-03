@@ -9,6 +9,31 @@ spring:
       enabled: true
   lifecycle:
     timeout-per-shutdown-phase: 30s
+  # 기준 저장소: s3 공용 PostgreSQL DB data2flow, 스키마 data2flow_core(ADR-019). 값은 환경변수(.env / k8s Secret)
+  datasource:
+    url: jdbc:postgresql://${DATA2FLOW_DB_HOST:localhost}:${DATA2FLOW_DB_PORT:5432}/${DATA2FLOW_DB_NAME:data2flow}?ApplicationName=data2flow-core-api
+    username: ${DATA2FLOW_DB_USERNAME:data2flow}
+    password: ${DATA2FLOW_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+      connection-init-sql: SET TIME ZONE 'UTC'
+  flyway:
+    schemas: data2flow_core
+    default-schema: data2flow_core
+    create-schemas: true
+  # RabbitMQ(s4, vhost: prod data2flow · staging data2flow-stg · local data2flow-dev, ADR-020·030)
+  rabbitmq:
+    host: ${DATA2FLOW_RABBITMQ_HOST:localhost}
+    port: ${DATA2FLOW_RABBITMQ_PORT:5672}
+    virtual-host: ${DATA2FLOW_RABBITMQ_VHOST:data2flow-dev}
+    username: ${DATA2FLOW_RABBITMQ_USERNAME:guest}
+    password: ${DATA2FLOW_RABBITMQ_PASSWORD:guest}
+    publisher-confirm-type: correlated
+    connection-timeout: 5s
+  messages:
+    basename: messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
 server:
   port: 8080
   shutdown: graceful
@@ -25,6 +50,45 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    # RabbitMQ·메일이 잠시 없어도 readiness를 떨어뜨리지 않는다(아웃박스가 나중에 보낸다)
+    rabbit:
+      enabled: false
+    mail:
+      enabled: false
   metrics:
     tags:
       application: ${spring.application.name}
+
+data2flow:
+  identity:
+    # 공개 경로(design/auth.md §3.3). 신원 헤더가 있으면 담고 없으면 통과한다
+    optional-paths:
+      - /core/invitations/*
+      - /core/invitations/*/login-id-availability
+      - /core/invitations/*/accept
+      - /core/password-resets
+      - /core/password-resets/*/confirm
+      - /core/signup-requests
+      - /core/signup-requests/*/verify
+      - /core/public/**
+  idempotency:
+    jdbc-table: data2flow_core.idempotency_keys
+  secrets:
+    # 비밀값 암호화 키(NFR-03.02): "kid:Base64 32바이트,…". k8s Secret data2flow-master-key / 로컬 .env
+    master-keys: ${DATA2FLOW_SECRETS_MASTER_KEYS:}
+    active-key-id: ${DATA2FLOW_SECRETS_ACTIVE_KEY_ID:}
+  core:
+    web-base-url: ${DATA2FLOW_WEB_BASE_URL:https://data2flow.java21.net}
+    auth-base-url: ${DATA2FLOW_AUTH_BASE_URL:http://data2flow-auth}
+    # ADR-030: DB를 staging·prod가 함께 쓰므로 migrate는 staging 배포에서만(application-staging.yml)
+    flyway-mode: validate
+    password:
+      hibp-enabled: ${DATA2FLOW_PASSWORD_HIBP_ENABLED:false}
+    bootstrap:
+      organization-code: ${DATA2FLOW_BOOTSTRAP_ORG_CODE:default}
+      organization-name: ${DATA2FLOW_BOOTSTRAP_ORG_NAME:data2flow}
+      admin-login-id: ${DATA2FLOW_BOOTSTRAP_ADMIN_LOGIN_ID:}
+      admin-email: ${DATA2FLOW_BOOTSTRAP_ADMIN_EMAIL:}
+      admin-initial-password: ${DATA2FLOW_BOOTSTRAP_ADMIN_INITIAL_PASSWORD:}
+      password-output-file: ${DATA2FLOW_BOOTSTRAP_PASSWORD_FILE:}
