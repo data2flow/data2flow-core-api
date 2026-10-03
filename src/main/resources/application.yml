@@ -104,3 +104,6 @@ data2flow:
       admin-email: ${DATA2FLOW_BOOTSTRAP_ADMIN_EMAIL:}
       admin-initial-password: ${DATA2FLOW_BOOTSTRAP_ADMIN_INITIAL_PASSWORD:}
       password-output-file: ${DATA2FLOW_BOOTSTRAP_PASSWORD_FILE:}
+    # 기본 모델 6종·측정 항목을 시작할 때 이 배포의 ACTIVE 조직마다 채운다(DEV-03.02, 멱등). 로컬 프로필은 끈다(공용 DB)
+    catalog:
+      seed-on-startup: ${DATA2FLOW_CATALOG_SEED_ON_STARTUP:true}
