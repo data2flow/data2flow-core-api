@@ -33,6 +33,7 @@ import net.java21.data2flow.core.organization.domain.OrganizationModels.OrgSetti
 import net.java21.data2flow.core.organization.repository.OrganizationRepository;
 import net.java21.data2flow.core.role.domain.RoleModels.UserRole;
 import net.java21.data2flow.core.role.repository.RoleRepository;
+import net.java21.data2flow.core.role.repository.SpaceScopeRepository;
 import net.java21.data2flow.core.role.service.RoleAssignments;
 import net.java21.data2flow.core.role.service.RoleAssignments.Assignment;
 import net.java21.data2flow.core.session.domain.RefreshToken.RevokeReason;
@@ -66,6 +67,7 @@ public class UserAdminService {
     private final PasswordHistoryRepository history;
     private final RefreshTokenRepository tokens;
     private final RoleAssignments assignments;
+    private final SpaceScopeRepository spaceNames;
     private final PasswordPolicy policy;
     private final PasswordEncoder encoder;
     private final SessionRevocations revocations;
@@ -77,7 +79,9 @@ public class UserAdminService {
     public UserAdminService(UserRepository users, RoleRepository roles, OrganizationRepository organizations,
                             PasswordHistoryRepository history, RefreshTokenRepository tokens, RoleAssignments assignments,
                             PasswordPolicy policy, PasswordEncoder encoder, SessionRevocations revocations,
-                            RoleChecker roleChecker, IamEventPublisher events, Audits audits, Clock clock) {
+                            RoleChecker roleChecker, IamEventPublisher events, Audits audits, Clock clock,
+                            SpaceScopeRepository spaceNames) {
+        this.spaceNames = spaceNames;
         this.users = users;
         this.roles = roles;
         this.organizations = organizations;
@@ -105,9 +109,11 @@ public class UserAdminService {
                 spaceId == null || !spaceId.matches("\\d{1,18}") ? null : Long.parseLong(spaceId));
         List<UserListRow> rows = users.search(search, orderBy, params.size(), params.offset());
         long total = users.count(search);
+        Map<Long, String> names = spaceNames.findNames(admin.organizationId(),
+                rows.stream().flatMap(r -> r.spaceScope().stream()).collect(java.util.stream.Collectors.toSet()));
         audits.record(audits.event(admin.organizationId(), AuditCodes.PERSONAL_INFO_ACCESSED).actor(admin)
                 .target("USER", null).detail("scope", "USER_LIST").detail("rows", rows.size()));
-        return ListApiResponse.of(params, rows.stream().map(UserAdminService::toSummary).toList(), total);
+        return ListApiResponse.of(params, rows.stream().map(r -> toSummary(r, names)).toList(), total);
     }
 
     /** API-IAM-32 회원 상세. 다른 조직 사용자는 404 USER_NOT_FOUND(BR-IAM-01) */
@@ -116,12 +122,13 @@ public class UserAdminService {
         CurrentUser admin = requireAdmin();
         AppUser user = load(admin, userId);
         UserRole role = roles.findUserRole(admin.organizationId(), userId).orElse(null);
+        Map<Long, String> names = role == null ? Map.of() : spaceNames.findNames(admin.organizationId(), role.spaceScope());
         audits.record(audits.event(admin.organizationId(), AuditCodes.PERSONAL_INFO_ACCESSED).actor(admin)
                 .target("USER", Long.toString(userId)).detail("scope", "USER_DETAIL"));
         return new UserDetailResponse(Long.toString(user.id()), user.loginId(), user.email(), user.name(), user.phone(),
                 user.locale(), user.timezone(), user.status().name(), role == null ? null : role.role(),
                 role == null || role.customRoleId() == null ? null : Long.toString(role.customRoleId()),
-                role == null ? List.of() : role.spaceScope().stream().map(id -> new SpaceRef(Long.toString(id), null)).toList(),
+                role == null ? List.of() : role.spaceScope().stream().map(id -> new SpaceRef(Long.toString(id), names.get(id))).toList(),
                 user.totpEnabled(), user.mustChangePassword(), user.lockedUntil(), user.lastLoginAt(), user.lastLoginIp(),
                 tokens.countActiveSessions(admin.organizationId(), userId, clock.instant()), user.createdAt(), user.version());
     }
@@ -309,8 +316,17 @@ public class UserAdminService {
         audits.record(event);
     }
 
-    private static UserSummaryResponse toSummary(UserListRow r) {
-        String scope = r.role() == null ? null : r.spaceScope().isEmpty() ? "ALL" : r.spaceScope().size() + " spaces";
+    /** 공간 범위 요약: 전체면 "ALL", 아니면 첫 공간 이름(+나머지 수), 예: "본관 2층 +2" */
+    static UserSummaryResponse toSummary(UserListRow r, Map<Long, String> names) {
+        String scope;
+        if (r.role() == null) {
+            scope = null;
+        } else if (r.spaceScope().isEmpty()) {
+            scope = "ALL";
+        } else {
+            Long first = r.spaceScope().getFirst();
+            scope = names.getOrDefault(first, first.toString()) + (r.spaceScope().size() > 1 ? " +" + (r.spaceScope().size() - 1) : "");
+        }
         return new UserSummaryResponse(Long.toString(r.id()), r.name(), r.loginId(), r.email(), r.role(), scope, r.status(),
                 r.mfaEnabled(), r.lastLoginAt());
     }
