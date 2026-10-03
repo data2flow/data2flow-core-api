@@ -153,10 +153,10 @@ public class DeviceRepository {
                 .update();
     }
 
-    /** 다시 수신된 PENDING 기기의 원본 정보(deviceName·tags) 갱신. 버전은 바꾸지 않는다(승인 화면의 baseVersion 유지) */
+    /** 다시 수신된 PENDING 기기의 원본 정보(deviceName·tags) 갱신(최상위 키 단위로 덮어쓰기). 버전은 바꾸지 않는다(승인 화면의 baseVersion 유지) */
     public void updatePendingMeta(long organizationId, long id, String sourceMetaJson, Long suggestedSpaceId) {
         jdbc.sql("""
-                        UPDATE data2flow_core.devices SET source_meta = CAST(:meta AS jsonb),
+                        UPDATE data2flow_core.devices SET source_meta = source_meta || CAST(:meta AS jsonb),
                                suggested_space_id = coalesce(:suggested, suggested_space_id)
                          WHERE organization_id = :org AND id = :id AND status = 'PENDING'""")
                 .param("meta", sourceMetaJson).param("suggested", suggestedSpaceId).param("org", organizationId).param("id", id)
