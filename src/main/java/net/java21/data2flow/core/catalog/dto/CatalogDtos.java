@@ -25,7 +25,7 @@ public final class CatalogDtos {
                                        boolean builtin, String status, long deviceCount, long metricCount, Instant updatedAt) {
     }
 
-    public record ModelMetricDto(@NotBlank String key, boolean required) {
+    public record ModelMetricDto(@NotBlank String key, Boolean required) {
     }
 
     public record CapabilityDto(@NotBlank @Size(max = 60) String capability, JsonNode constraints) {

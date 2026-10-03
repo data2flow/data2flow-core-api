@@ -348,7 +348,7 @@ public class DeviceModelService {
                 throw Patch.invalid("metrics", "NotBlank", null);
             }
             String key = dto.key().strip();
-            result.putIfAbsent(key, new ModelMetric(key, dto.required()));
+            result.putIfAbsent(key, new ModelMetric(key, Boolean.TRUE.equals(dto.required())));
         }
         return List.copyOf(result.values());
     }
