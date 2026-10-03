@@ -73,13 +73,16 @@ class SourceServiceUnitTest {
     }
 
     @Test
-    @DisplayName("[DSC-02.05][DSC-09.11] 연결 테스트 결과: FAILED→FAIL, ok·stage 추가, 빈 결과는 ok=false")
+    @DisplayName("[DSC-02.05][DSC-09.11] 연결 테스트 결과: 단계 상태 FAILED 그대로(예전 FAIL은 FAILED로), ok·stage 추가, 빈 결과는 ok=false")
     void normalizeTestResult() {
         JsonNode r = ConnectionTestService.normalize(JSON.readTree(
                 "{\"steps\":[{\"name\":\"DNS\",\"status\":\"FAILED\"},{\"name\":\"TCP\",\"status\":\"SKIPPED\"}],\"stage\":\"x\"}"));
         assertThat(r.get("ok").asBoolean()).isFalse();
         assertThat(r.get("stage").asString()).isEqualTo("DNS");
-        assertThat(r.at("/steps/0/status").asString()).isEqualTo("FAIL");
+        assertThat(r.at("/steps/0/status").asString()).isEqualTo("FAILED");
+        JsonNode legacy = ConnectionTestService.normalize(JSON.readTree("{\"steps\":[{\"name\":\"AUTH\",\"status\":\"FAIL\"}]}"));
+        assertThat(legacy.at("/steps/0/status").asString()).isEqualTo("FAILED");
+        assertThat(legacy.get("stage").asString()).isEqualTo("AUTH");
         assertThat(r.get("preview").isArray()).isTrue();
         JsonNode empty = ConnectionTestService.normalize(null);
         assertThat(empty.get("ok").asBoolean()).isFalse();

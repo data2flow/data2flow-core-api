@@ -48,7 +48,7 @@ class ConnectionTestIT extends SourceItSupport {
     }
 
     @Test
-    @DisplayName("[DSC-02.05][AT-DSC-01.2][AT-DSC-13.1] 실패는 200 + ok=false·stage(첫 실패 단계), FAILED는 FAIL로, 검증 오류·비밀값 없음은 ingress 호출 전에 400")
+    @DisplayName("[DSC-02.05][AT-DSC-01.2][AT-DSC-13.1] 실패는 200 + ok=false·stage(첫 실패 단계), 단계 상태는 FAILED 그대로(API-DSC-57), 검증 오류·비밀값 없음은 ingress 호출 전에 400")
     void failures() throws Exception {
         INGRESS.testResponse.set("""
                 {"steps":[{"name":"DNS","status":"OK","ms":2},{"name":"TCP","status":"OK","ms":3},{"name":"TLS","status":"OK","ms":4},
@@ -56,7 +56,7 @@ class ConnectionTestIT extends SourceItSupport {
                  "preview":[],"lossPossible":true}""");
         mvc.perform(as(org, integrator, json(post("/core/sources/test"), mqttBody("bad", null)))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.response.ok").value(false)).andExpect(jsonPath("$.response.stage").value("AUTH"))
-                .andExpect(jsonPath("$.response.steps[3].status").value("FAIL"))
+                .andExpect(jsonPath("$.response.steps[3].status").value("FAILED"))
                 .andExpect(jsonPath("$.response.steps[3].code").value("AUTH_FAILED"));
 
         mvc.perform(as(org, integrator, json(post("/core/sources/test"),

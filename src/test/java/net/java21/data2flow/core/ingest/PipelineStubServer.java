@@ -58,7 +58,8 @@ public final class PipelineStubServer {
             }
         }
         Reply reply = responder.apply(request);
-        byte[] bytes = reply.body() == null ? new byte[0] : reply.body().getBytes(StandardCharsets.UTF_8);
+        String text = reply.status() / 100 == 2 ? envelope(reply.body()) : reply.body();
+        byte[] bytes = text == null ? new byte[0] : text.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(reply.status(), bytes.length == 0 ? -1 : bytes.length);
         if (bytes.length > 0) {
@@ -86,6 +87,14 @@ public final class PipelineStubServer {
             return new Reply(200, "{\"discarded\":" + (ids.isBlank() ? 0 : ids.split(",").length) + "}");
         }
         return new Reply(404, null);
+    }
+
+    /** pipeline 실제 응답 모양: ApiResponse.success(...) → {@code {header:{isSuccessful,resultCode,resultMessage}, response}} */
+    public static String envelope(String body) {
+        if (body == null || body.startsWith("{\"header\"")) {
+            return body;
+        }
+        return "{\"header\":{\"isSuccessful\":true,\"resultCode\":\"SUCCESS\",\"resultMessage\":\"SUCCESS\"},\"response\":" + body + "}";
     }
 
     /** 재처리 요청 본문의 항목 ID마다 같은 결과를 만든다 */

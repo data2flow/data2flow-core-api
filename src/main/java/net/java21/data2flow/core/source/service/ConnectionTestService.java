@@ -37,8 +37,8 @@ import java.util.concurrent.Semaphore;
  *   <li>제한 시간: 기본 {@value #DEFAULT_TIMEOUT_SEC}초(BR-DSC-07), 요청 {@code timeoutSec}로 최대 {@value #MAX_TIMEOUT_SEC}초까지
  *       (API-DSC-57의 30초는 상한으로 읽었다. 범위 밖 값은 경계값으로)</li>
  *   <li>동시 테스트는 조직당 {@value #MAX_CONCURRENT}개(API-DSC-51). 넘으면 429 RATE_LIMITED. 파드마다 세고, ingress도 따로 막는다</li>
- *   <li>응답: ingress 결과에 {@code ok}(실패 단계 없음)와 {@code stage}(처음 실패한 단계)를 더한다. 단계 상태는 문서·웹 표기
- *       {@code OK|FAIL|SKIPPED}로 맞춘다(contracts {@code StepStatus.FAILED} → {@code FAIL})</li>
+ *   <li>응답: ingress 결과에 {@code ok}(실패 단계 없음)와 {@code stage}(처음 실패한 단계)를 더한다. 단계 상태는 ingress가 준
+ *       그대로 {@code OK|FAILED|SKIPPED}(API-DSC-57, contracts {@code StepStatus})이고, 예전 표기 {@code FAIL}이 오면 {@code FAILED}로 읽는다</li>
  * </ul>
  */
 @Service
@@ -147,7 +147,7 @@ public class ConnectionTestService {
         }
     }
 
-    /** 단계 상태 표기를 맞추고 ok·stage를 더한다 */
+    /** ok·stage를 더한다. 단계 상태는 FAILED 그대로(예전 표기 FAIL은 FAILED로) */
     static JsonNode normalize(JsonNode result) {
         ObjectNode out = result != null && result.isObject() ? ((ObjectNode) result).deepCopy() : JsonNodeFactory.instance.objectNode();
         ArrayNode steps = out.has("steps") && out.get("steps").isArray() ? (ArrayNode) out.get("steps") : out.putArray("steps");
@@ -159,10 +159,10 @@ public class ConnectionTestService {
         }
         String failed = null;
         for (JsonNode step : steps) {
-            if (step instanceof ObjectNode s && "FAILED".equals(s.path("status").asString(""))) {
-                s.put("status", "FAIL");
+            if (step instanceof ObjectNode s && "FAIL".equals(s.path("status").asString(""))) {
+                s.put("status", "FAILED");
             }
-            if (failed == null && "FAIL".equals(step.path("status").asString(""))) {
+            if (failed == null && "FAILED".equals(step.path("status").asString(""))) {
                 failed = step.path("name").asString(null);
             }
         }
