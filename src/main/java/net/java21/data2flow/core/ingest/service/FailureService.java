@@ -244,7 +244,7 @@ public class FailureService {
     }
 
     /** pipeline 결과(OK·FAILED·SKIPPED) → 화면 결과(RESOLVED·SAME_ERROR·OTHER_ERROR·LOCKED) */
-    static ReprocessResult outcome(long id, ItemResult result, String originalError) {
+    public static ReprocessResult outcome(long id, ItemResult result, String originalError) {
         String key = Long.toString(id);
         if (result == null) {
             return new ReprocessResult(key, "OTHER_ERROR", null);
