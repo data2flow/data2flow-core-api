@@ -154,7 +154,7 @@ public class GatewayService {
                 .orElseThrow(() -> new BusinessException(CommonErrorCode.RESOURCE_NOT_FOUND));
         SpaceScope scope = roleChecker.spaceScope();
         // 공간이 정해지지 않은 게이트웨이는 공간 범위가 제한된 사용자에게 보이지 않는다(목록과 같게, BR-DEV-25)
-        roleChecker.require(permission, row.spaceId() == null && !scope.unrestricted() ? -1L : row.spaceId(),
+        roleChecker.require(permission, row.spaceId() == null && !scope.unrestricted() ? Long.valueOf(-1L) : row.spaceId(),
                 CommonErrorCode.RESOURCE_NOT_FOUND);
         return row;
     }
