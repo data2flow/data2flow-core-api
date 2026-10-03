@@ -73,7 +73,7 @@ class LiveStreamFilterIT extends IntegrationTestSupport {
         lab = data.space(org, building, "ROOM", "실습실");
         classroom = data.space(org, building, "ROOM", "강의실");
         data.metric(org, "co2", "ppm");
-        source = live.source(org, "campus-lns");
+        source = data.source(org, "campus-lns");
         labSensor = data.device(org, source, "a1", "ACTIVE", lab, null);
         classSensor = data.device(org, source, "b1", "ACTIVE", classroom, null);
         data.deviceState(org, labSensor, "ONLINE", T0, "{\"co2\":{\"v\":1150,\"t\":\"2026-10-03T00:00:00Z\",\"q\":0}}");
@@ -140,7 +140,7 @@ class LiveStreamFilterIT extends IntegrationTestSupport {
     @DisplayName("[DSH-03.03][TC-DSH-022] 수집 메시지 필터의 소스가 다른 조직이면 404 SOURCE_NOT_FOUND, 범위 밖 기기면 404")
     void messageFilterTargets() throws Exception {
         long other = fx.organization("other");
-        long otherSource = live.source(other, "other-lns");
+        long otherSource = data.source(other, "other-lns");
         mvc.perform(as(org, admin, stream("ingest-messages?sourceId=" + otherSource)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.header.resultCode").value("SOURCE_NOT_FOUND"));

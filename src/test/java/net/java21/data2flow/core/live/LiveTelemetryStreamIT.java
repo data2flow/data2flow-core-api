@@ -93,7 +93,7 @@ class LiveTelemetryStreamIT extends IntegrationTestSupport {
         long site = data.site(org, "캠퍼스");
         long lab = data.space(org, site, "ROOM", "실습실");
         long hall = data.space(org, site, "ROOM", "강당");
-        long source = live.source(org, "campus-lns");
+        long source = data.source(org, "campus-lns");
         long labSensor = data.device(org, source, "a1", "ACTIVE", lab, null);
         long hallSensor = data.device(org, source, "h1", "ACTIVE", hall, null);
         long user = fx.user(org, "stream.viewer", "VIEWER");

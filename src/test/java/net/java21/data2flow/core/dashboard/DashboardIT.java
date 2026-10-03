@@ -49,7 +49,7 @@ class DashboardIT extends IntegrationTestSupport {
         data.metric(org, "co2", "ppm");
         data.metric(org, "temperature", "°C");
         long model = data.model(org, "AM319", List.of("co2", "temperature"));
-        source = live.source(org, "campus-lns");
+        source = data.source(org, "campus-lns");
         labSensor = data.device(org, source, "a1", "ACTIVE", lab, model);
         long classSensor = data.device(org, source, "b1", "ACTIVE", classroom, model);
         long classOffline = data.device(org, source, "b2", "ACTIVE", classroom, model);
@@ -216,7 +216,7 @@ class DashboardIT extends IntegrationTestSupport {
     @Test
     @DisplayName("[DSH-03.02][IAM-04.06] 범위가 제한된 사용자는 사이트가 범위 안인 소스만, 실패 보관함 수치는 0")
     void ingestMonitorScope() throws Exception {
-        long other = live.source(org, "other-lns");
+        long other = data.source(org, "other-lns");
         live.siteOf(org, source, site);
         live.stat(org, other, T0.minus(Duration.ofMinutes(2)), 77, 0);
         live.dlq(org, "STORE", T0.minusSeconds(10));

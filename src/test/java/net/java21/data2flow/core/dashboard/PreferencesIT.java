@@ -35,7 +35,7 @@ class PreferencesIT extends IntegrationTestSupport {
         long site = data.site(org, "캠퍼스");
         lab = data.space(org, site, "ROOM", "실습실");
         classroom = data.space(org, site, "ROOM", "강의실");
-        long source = new net.java21.data2flow.core.live.LiveTestData(jdbc).source(org, "campus-lns");
+        long source = data.source(org, "campus-lns");
         device = data.device(org, source, "a1", "ACTIVE", lab, null);
     }
 

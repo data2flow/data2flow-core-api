@@ -18,21 +18,6 @@ public class LiveTestData {
         this.jdbc = jdbc;
     }
 
-    /**
-     * MQTT 구독 소스(ACTIVE). M2Data.source와 같지만 unknown_device_policy를 직접 넣는다: 기반 마이그레이션의 기본값 'AUTO_REGISTER'(13자)가
-     * 열 길이 varchar(12)를 넘어 기본값으로는 넣을 수 없다(기반 결함, 보고함).
-     */
-    public long source(long orgId, String code) {
-        return jdbc.sql("""
-                        INSERT INTO data2flow_core.data_sources (organization_id, code, name, type, lifecycle, connection, decoder_key,
-                                                                unknown_device_policy, created_by, updated_by)
-                        VALUES (:org, :code, :name, 'MQTT_SUBSCRIBE', 'ACTIVE', CAST(:conn AS jsonb), 'chirpstack-v4', 'REJECT', 0, 0)
-                        RETURNING id""")
-                .param("org", orgId).param("code", code).param("name", "소스 " + code)
-                .param("conn", "{\"url\":\"wss://broker.test/mqtt\",\"protocol\":\"wss\"}")
-                .query(Long.class).single();
-    }
-
     public void target(long orgId, long spaceId, String metricKey, Double min, Double max) {
         jdbc.sql("""
                         INSERT INTO data2flow_core.space_targets (organization_id, space_id, metric_key, min_value, max_value)
