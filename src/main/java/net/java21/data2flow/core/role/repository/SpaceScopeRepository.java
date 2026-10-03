@@ -5,7 +5,9 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -44,5 +46,17 @@ public class SpaceScopeRepository {
                          WHERE a.organization_id = :org AND a.id = ANY(CAST(:ids AS bigint[])) AND d.status = 'ACTIVE'""")
                 .param("org", organizationId).param("ids", Pg.bigintArray(spaceIds))
                 .query(Long.class).list());
+    }
+
+    /** 공간 이름(회원 목록·상세의 공간 범위 표시, IAM-01.07). 보관된 공간도 이름을 돌려준다 */
+    public Map<Long, String> findNames(long organizationId, Collection<Long> spaceIds) {
+        Map<Long, String> names = new HashMap<>();
+        if (spaceIds == null || spaceIds.isEmpty()) {
+            return names;
+        }
+        jdbc.sql("SELECT id, name FROM data2flow_core.spaces WHERE organization_id = :org AND id = ANY(CAST(:ids AS bigint[]))")
+                .param("org", organizationId).param("ids", Pg.bigintArray(spaceIds))
+                .query((rs, n) -> names.put(rs.getLong("id"), rs.getString("name"))).list();
+        return names;
     }
 }
