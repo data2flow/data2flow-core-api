@@ -97,7 +97,7 @@ class SpaceIT extends IntegrationTestSupport {
         mvc.perform(as(org, integrator, json(post("/core/spaces"), "{\"parentId\":\"" + floor + "\",\"type\":\"ROOM\",\"name\":\"lab \"}")))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.header.resultCode").value("SPACE_NAME_DUPLICATE"));
         // 비지 않은 공간: 하위 + 기기 3대
-        long source = SpaceFixtures.source(jdbc, org, "src-1");
+        long source = data.source(org, "src-1");
         for (int i = 0; i < 3; i++) {
             data.device(org, source, "dev-" + i, "ACTIVE", Long.parseLong(room), null);
         }
@@ -330,7 +330,7 @@ class SpaceIT extends IntegrationTestSupport {
         long site = data.site(org, "사이트");
         long building = data.space(org, site, "BUILDING", "본관");
         long room = data.space(org, building, "ROOM", "실습실");
-        long source = SpaceFixtures.source(jdbc, org, "src-a");
+        long source = data.source(org, "src-a");
         long d1 = data.device(org, source, "a1", "ACTIVE", room, null);
         data.device(org, source, "a2", "ACTIVE", building, null);
         data.device(org, source, "a3", "DELETED", room, null);
@@ -374,7 +374,7 @@ class SpaceIT extends IntegrationTestSupport {
         long site = data.site(org, "사이트");
         long lab = data.space(org, site, "ROOM", "실습실");
         long hall = data.space(org, site, "ROOM", "복도");
-        long source = SpaceFixtures.source(jdbc, org, "src-a");
+        long source = data.source(org, "src-a");
         long model = data.model(org, "AC-1", List.of());
         long sensorModel = data.model(org, "EM-1", List.of());
         jdbc.sql("""

@@ -56,7 +56,7 @@ class SpacePermissionIT extends IntegrationTestSupport {
         buildingB = data.space(org, site1, "BUILDING", "B동");
         roomB = data.space(org, buildingB, "ROOM", "B101");
         site2 = data.site(org, "사이트2");
-        long src = SpaceFixtures.source(jdbc, org, "src-p");
+        long src = data.source(org, "src-p");
         deviceA = data.device(org, src, "dev-a", "ACTIVE", roomA, null);
         deviceB = data.device(org, src, "dev-b", "ACTIVE", roomB, null);
         data.device(org, src, "dev-c", "ACTIVE", site2, null);
@@ -174,7 +174,7 @@ class SpacePermissionIT extends IntegrationTestSupport {
                         "{\"items\":[{\"spaceId\":\"" + roomB + "\",\"relation\":\"MEASURES\"}]}")))
                 .andExpect(status().isNotFound()).andExpect(jsonPath("$.header.resultCode").value("SPACE_NOT_FOUND"));
         // 공간 미배치 기기는 범위 있는 사용자에게 보이지 않는다
-        long loose = data.device(org, SpaceFixtures.source(jdbc, org, "src-q"), "loose", "PENDING", null, null);
+        long loose = data.device(org, data.source(org, "src-q"), "loose", "PENDING", null, null);
         mvc.perform(as(org, scoped, get("/core/devices/" + loose + "/semantic"))).andExpect(status().isNotFound());
         mvc.perform(as(org, users.get("VIEWER"), get("/core/devices/" + loose + "/semantic"))).andExpect(status().isOk());
     }

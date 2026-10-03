@@ -271,7 +271,7 @@ public class UserRepository {
         }
         if (s.spaceId() != null) {
             // 그 공간을 볼 수 있는 회원: 전체 범위이거나, 범위의 어느 공간이 그 공간의 조상(자기 포함)이다(IAM-01.07, BR-IAM-16)
-            sql.append("""
+            sql.append(" ").append("""
                      AND (r.space_scope = '{}' OR EXISTS (
                             SELECT 1 FROM data2flow_core.spaces sp, unnest(r.space_scope) AS a(space_id)
                              WHERE sp.organization_id = u.organization_id AND sp.id = :spaceId

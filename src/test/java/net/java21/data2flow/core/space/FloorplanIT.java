@@ -35,7 +35,7 @@ class FloorplanIT extends IntegrationTestSupport {
         floor = data.space(org, site, "FLOOR", "2층");
         room = data.space(org, floor, "ROOM", "201호");
         long other = data.space(org, site, "FLOOR", "3층");
-        long src = SpaceFixtures.source(jdbc, org, "src-f");
+        long src = data.source(org, "src-f");
         device = data.device(org, src, "dev-1", "ACTIVE", room, null);
         outside = data.device(org, src, "dev-2", "ACTIVE", other, null);
     }
