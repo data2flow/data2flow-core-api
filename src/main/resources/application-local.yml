@@ -16,3 +16,6 @@ data2flow:
     # 실시간 화면의 텔레메트리 소비자 그룹 접미사(core-live-<이름>, deployment.md §8.2)
     live:
       developer: ${DATA2FLOW_DEVELOPER:}
+    # 공용 DB에 기본 카탈로그를 쓰지 않는다(조직 생성·운영 배포가 채운다)
+    catalog:
+      seed-on-startup: false

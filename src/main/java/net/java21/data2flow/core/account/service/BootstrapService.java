@@ -8,6 +8,7 @@ import net.java21.data2flow.core.account.repository.UserRepository;
 import net.java21.data2flow.core.account.repository.UserRepository.NewUser;
 import net.java21.data2flow.core.audit.service.AuditCodes;
 import net.java21.data2flow.core.audit.service.Audits;
+import net.java21.data2flow.core.catalog.service.BuiltinCatalogSeeder;
 import net.java21.data2flow.core.common.Tokens;
 import net.java21.data2flow.core.config.CoreProperties.Bootstrap;
 import net.java21.data2flow.core.organization.domain.OrganizationModels.Organization;
@@ -49,11 +50,12 @@ public class BootstrapService {
     private final PasswordEncoder encoder;
     private final Audits audits;
     private final IamEventPublisher events;
+    private final BuiltinCatalogSeeder catalogSeeder;
     private final Clock clock;
 
     public BootstrapService(OrganizationRepository organizations, UserRepository users, RoleRepository roles,
                             PasswordHistoryRepository history, PasswordEncoder encoder, Audits audits, IamEventPublisher events,
-                            Clock clock) {
+                            BuiltinCatalogSeeder catalogSeeder, Clock clock) {
         this.organizations = organizations;
         this.users = users;
         this.roles = roles;
@@ -61,6 +63,7 @@ public class BootstrapService {
         this.encoder = encoder;
         this.audits = audits;
         this.events = events;
+        this.catalogSeeder = catalogSeeder;
         this.clock = clock;
     }
 
@@ -73,6 +76,8 @@ public class BootstrapService {
         });
         organizations.insertSettingsIfAbsent(org.id(), org.name(), org.timezone(), org.locale());
         organizations.insertPolicyIfAbsent(org.id());
+        // DEV-03.02: 새 조직에는 기본 모델 6종과 측정 항목이 있다(멱등)
+        catalogSeeder.seed(org.id());
         if (users.existsAdmin(org.id())) {
             return Result.ALREADY_INITIALIZED;
         }
