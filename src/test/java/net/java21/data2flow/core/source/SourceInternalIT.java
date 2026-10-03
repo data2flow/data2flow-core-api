@@ -34,6 +34,7 @@ class SourceInternalIT extends SourceItSupport {
                 .andExpect(jsonPath("$.response.sources[0].config.clientIdBase").value("data2flow-run-a"))
                 .andExpect(jsonPath("$.response.sources[0].config.version").value("5.0"))
                 .andExpect(jsonPath("$.response.sources[0].clientIdBase").value("data2flow-run-a"))
+                .andExpect(jsonPath("$.response.sources[0].clientId").value("data2flow-run-a"))
                 .andExpect(jsonPath("$.response.sources[0].qos").value(1))
                 .andExpect(jsonPath("$.response.sources[0].rateLimit.maxMessagesPerSec").value(500))
                 .andExpect(jsonPath("$.response.sources[0].rateLimit.maxMessageBytes").value(262144))

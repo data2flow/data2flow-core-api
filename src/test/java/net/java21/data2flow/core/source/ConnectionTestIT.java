@@ -36,6 +36,8 @@ class ConnectionTestIT extends SourceItSupport {
         assertThat((Integer) JsonPath.read(sent, "$.timeoutSec")).isEqualTo(15);
         assertThat((String) JsonPath.read(sent, "$.config.topics[0].topic")).isEqualTo("application/+/device/+/event/up");
         assertThat((String) JsonPath.read(sent, "$.clientIdBase")).isEqualTo("data2flow-try");
+        // ingress SourceTestRequest.organizationId는 숫자(Long)다(API-DSC-51)
+        assertThat(((Number) JsonPath.read(sent, "$.organizationId")).longValue()).isPositive();
         assertThat((String) JsonPath.read(sent, "$.config.version")).isEqualTo("5.0");
         assertThat(INGRESS.callers).containsOnly("data2flow-core-api");
         assertThat(jdbc.sql("SELECT count(*) FROM data2flow_core.data_sources").query(Long.class).single()).isZero();

@@ -125,7 +125,7 @@ public class ConnectionTestService {
         Map<String, String> plain = new LinkedHashMap<>();
         all.forEach((k, val) -> plain.put(k, val.reveal()));
         Map<String, Object> request = new LinkedHashMap<>();
-        request.put("organizationId", Long.toString(orgId));
+        request.put("organizationId", orgId);
         request.put("sourceId", sourceId == null ? null : Long.toString(sourceId));
         request.put("type", type);
         request.put("connectorKey", SourceModels.CONNECTOR_OF_TYPE.get(type));

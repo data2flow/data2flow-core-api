@@ -95,7 +95,7 @@ public class SourceRuntimeConfigService {
             result.add(new RuntimeSource(Long.toString(s.id()), Long.toString(s.organizationId()), s.code(), s.type(),
                     s.connectorKey() == null ? SourceModels.CONNECTOR_OF_TYPE.get(s.type()) : s.connectorKey(), s.connectorVersion(),
                     s.lifecycle(), config(s, t), plain, t.stream().map(x -> new TopicDto(x.topic(), x.qos())).toList(), qos,
-                    s.clientIdBase(), s.unknownDevicePolicy(), new RateLimit(l.maxMessagesPerSec(), l.maxMessageBytes(), WARN_RATIO),
+                    s.clientIdBase(), s.clientIdBase(), s.unknownDevicePolicy(), new RateLimit(l.maxMessagesPerSec(), l.maxMessageBytes(), WARN_RATIO),
                     s.decoderKey(), s.version()));
         }
         return Optional.of(new RuntimeConfigResponse(version, result));

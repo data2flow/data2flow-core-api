@@ -132,12 +132,14 @@ public final class SourceDtos {
     }
 
     /**
-     * ingress 실행 설정 한 건. config = connection + {@code topics[]} + {@code clientIdBase}(ingress가 {@code {base}-{env}-{n}}을 붙인다,
+     * ingress 실행 설정 한 건. {@code clientId}는 client-id base(API-DSC-50, ingress가 읽는 이름. {@code clientIdBase}는 같은 값의 별칭).
+     * config = connection + {@code topics[]} + {@code clientIdBase}(ingress가 {@code {base}-{env}-{n}}을 붙인다,
      * contracts ClientIds). secrets는 종류(PASSWORD·HEADER_VALUE·CLIENT_CERT·CLIENT_KEY·CA_CERT …) → <b>복호화한 값</b>(내부 전용, 로그 금지).
      */
     public record RuntimeSource(String id, String organizationId, String code, String type, String connectorKey,
                                 String connectorVersion, String lifecycle, JsonNode config, Map<String, String> secrets,
-                                List<TopicDto> topics, int qos, String clientIdBase, String unknownDevicePolicy, RateLimit rateLimit,
+                                List<TopicDto> topics, int qos, String clientId, String clientIdBase, String unknownDevicePolicy,
+                                RateLimit rateLimit,
                                 String decoderKey, int version) {
         @Override
         public String toString() {
