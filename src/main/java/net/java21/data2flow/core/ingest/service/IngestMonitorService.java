@@ -183,9 +183,9 @@ public class IngestMonitorService {
         }
         List<MetricPoint> points = new ArrayList<>();
         for (Instant t = origin; t.isBefore(to); t = t.plus(stepDuration)) {
-            Map<String, Long> statuses = resultCounts(byBucket.getOrDefault(t, Map.of()));
+            Map<String, Long> raw = byBucket.getOrDefault(t, Map.of());
             BucketLatency l = latency.get(t);
-            points.add(new MetricPoint(t, statuses.values().stream().mapToLong(Long::longValue).sum(), statuses,
+            points.add(new MetricPoint(t, raw.values().stream().mapToLong(Long::longValue).sum(), resultCounts(raw),
                     l == null ? null : l.p50(), l == null ? null : l.p95()));
         }
         return new MetricsResponse(step, points);

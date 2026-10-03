@@ -47,6 +47,3 @@ ALTER TABLE data2flow_core.ops_thresholds
 
 COMMENT ON COLUMN data2flow_core.ops_thresholds.channel_ids IS '운영 알림을 보낼 알림 채널 ID(API-OPS-05). 비면 조직 기본 운영 채널';
 
--- 기반 마이그레이션 보정: data_sources.unknown_device_policy가 varchar(12)인데 기본값 'AUTO_REGISTER'는 13자라 기본값으로 넣을 수 없다.
--- 길이만 넓힌다(varchar 확장은 PostgreSQL에서 테이블을 다시 쓰지 않는 메타데이터 변경, expand-only). 다른 묶음이 같은 변경을 해도 무해하다.
-ALTER TABLE data2flow_core.data_sources ALTER COLUMN unknown_device_policy TYPE varchar(16);

@@ -66,11 +66,12 @@ public class IngestMonitorRepository {
 
     /** 아직 처리되지 않은(RECEIVED) 원본 중 가장 오래된 수신 시각(1일 안) */
     public Optional<Instant> findOldestPending(long organizationId, Instant since) {
-        return Optional.ofNullable(jdbc.sql("""
-                        SELECT min(received_at) AS oldest FROM data2flow_pipeline.raw_messages
-                         WHERE organization_id = :org AND status = 'RECEIVED' AND processed_at IS NULL AND received_at >= :since""")
+        return jdbc.sql("""
+                        SELECT received_at AS oldest FROM data2flow_pipeline.raw_messages
+                         WHERE organization_id = :org AND status = 'RECEIVED' AND processed_at IS NULL AND received_at >= :since
+                         ORDER BY received_at LIMIT 1""")
                 .param("org", organizationId).param("since", Pg.ts(since))
-                .query((rs, n) -> Pg.instant(rs, "oldest")).single());
+                .query((rs, n) -> Pg.instant(rs, "oldest")).optional();
     }
 
     /** 이 시각 이후 새 실패 메시지 수 */
