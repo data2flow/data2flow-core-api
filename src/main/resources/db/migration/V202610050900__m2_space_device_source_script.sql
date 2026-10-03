@@ -560,7 +560,7 @@ CREATE TABLE data2flow_core.data_sources (
     decoder_key varchar(30) NOT NULL,
     decoder_config jsonb,
     decode_script_id bigint,
-    unknown_device_policy varchar(12) NOT NULL DEFAULT 'AUTO_REGISTER',
+    unknown_device_policy varchar(16) NOT NULL DEFAULT 'AUTO_REGISTER',
     default_model_id bigint,
     default_space_id bigint,
     autoreg_limit_per_hour integer NOT NULL DEFAULT 100,
