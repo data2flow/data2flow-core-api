@@ -1,5 +1,6 @@
 package net.java21.data2flow.core.device.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import net.java21.data2flow.contracts.error.BusinessException;
@@ -73,9 +74,12 @@ public class DeviceController {
                                                        @RequestParam(required = false) String groupId,
                                                        @RequestParam(required = false) Boolean virtual,
                                                        @RequestParam(required = false) String onboarding,
-                                                       @RequestParam(required = false) List<String> sort,
                                                        @RequestParam(required = false) Integer page,
-                                                       @RequestParam(required = false) Integer size) {
+                                                       @RequestParam(required = false) Integer size,
+                                                       HttpServletRequest request) {
+        // sort=필드,방향 은 쉼표가 들어 있어 List 변환이 쪼개므로 원래 값들을 읽는다
+        String[] sorts = request.getParameterValues("sort");
+        List<String> sort = sorts == null ? null : List.of(sorts);
         return service.list(new ListQuery(q, status, connectivity, kind, modelId, spaceId, includeDescendants, sourceId, tag, groupId,
                 virtual, onboarding, sort), page, size);
     }

@@ -100,7 +100,7 @@ public final class DeviceDtos {
             @NotBlank @Pattern(regexp = "\\d{1,18}") String spaceId,
             @Min(10) @Max(86400) Integer expectedIntervalSec,
             @DecimalMin("1.5") @DecimalMax("10") BigDecimal offlineMultiplier,
-            @Size(max = 20) List<String> tags,
+            List<String> tags,
             Boolean virtual) {
     }
 
@@ -116,7 +116,7 @@ public final class DeviceDtos {
                                  @Pattern(regexp = "\\d{1,18}") String modelId,
                                  @Pattern(regexp = "\\d{1,18}") String spaceId,
                                  @Size(max = 100) String name,
-                                 @Size(max = 20) List<String> tags,
+                                 List<String> tags,
                                  Boolean applyModelPackage) {
     }
 
@@ -148,7 +148,7 @@ public final class DeviceDtos {
 
     /** API-DEV-21 태그 일괄 */
     public record TagRequest(@NotEmpty @Size(max = 1000) List<@Pattern(regexp = "\\d{1,18}") String> deviceIds,
-                             @Size(max = 20) List<String> add, @Size(max = 20) List<String> remove) {
+                             @Size(max = 100) List<String> add, @Size(max = 100) List<String> remove) {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
