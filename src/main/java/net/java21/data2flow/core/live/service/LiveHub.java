@@ -16,6 +16,7 @@ import net.java21.data2flow.core.dashboard.service.HomeSummaryService;
 import net.java21.data2flow.core.dashboard.service.IngestFlowService;
 import net.java21.data2flow.core.live.domain.LiveTopic;
 import net.java21.data2flow.core.live.domain.Subscription;
+import net.java21.data2flow.core.live.dto.LiveDtos;
 import net.java21.data2flow.core.live.dto.LiveDtos.DeviceUpdate;
 import net.java21.data2flow.core.live.dto.LiveDtos.IngestMessage;
 import net.java21.data2flow.core.live.dto.LiveDtos.MetricUpdate;
@@ -210,8 +211,20 @@ public class LiveHub implements SmartLifecycle {
             }
             case SpaceChanged p -> refreshSubscriptions(targets);
             case DevicePendingCreated p -> log.trace("승인 대기 기기 {}: 홈 다시 계산", p.deviceId());
-            case SourceConnectionChanged p -> log.trace("소스 {} 연결 {}: 홈 다시 계산", p.sourceId(), p.to());
+            case SourceConnectionChanged p -> sourceState(targets, p);
             default -> log.trace("실시간 화면이 쓰지 않는 이벤트 {}", event.type());
+        }
+    }
+
+    /** {@code sources} 토픽에 소스 연결 상태 변경을 보낸다(DSC-02.01, 같은 조직 연결만) */
+    private void sourceState(Collection<LiveConnection> targets, SourceConnectionChanged p) {
+        String body = write(new LiveDtos.SourceState(Long.toString(p.sourceId()), p.to() == null ? null : p.to().name(),
+                p.from() == null ? null : p.from().name(), p.errorKind() == null ? null : p.errorKind().name(),
+                p.at() == null ? clock.instant() : p.at()));
+        for (LiveConnection c : targets) {
+            if (c.isOpen() && c.subscription().sources()) {
+                c.send("source-state", body);
+            }
         }
     }
 

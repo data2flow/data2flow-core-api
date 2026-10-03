@@ -7,7 +7,10 @@ import net.java21.data2flow.contracts.message.MessageCodec;
 import net.java21.data2flow.contracts.message.event.DeviceChanged;
 import net.java21.data2flow.contracts.message.event.DeviceConnectivityChanged;
 import net.java21.data2flow.contracts.message.event.DevicePendingCreated;
+import net.java21.data2flow.contracts.message.event.SourceConnectionChanged;
 import net.java21.data2flow.contracts.message.event.SpaceChanged;
+import net.java21.data2flow.contracts.connector.ConnectionErrorKind;
+import net.java21.data2flow.contracts.connector.ConnectorState;
 import net.java21.data2flow.contracts.messaging.MessagingNames;
 import net.java21.data2flow.core.live.service.LiveHub;
 import net.java21.data2flow.core.support.IntegrationTestSupport;
@@ -328,5 +331,38 @@ class LiveStreamFilterIT extends IntegrationTestSupport {
             assertThat(body(r)).contains("\"connection\":\"OFFLINE\"");
         });
         assertThat(body(r)).doesNotContain("\"deviceId\":\"" + classSensor + "\"");
+    }
+
+    @Test
+    @DisplayName("[DSC-02.01][AT-DSC-02.1] sources 토픽: 소스 연결 상태가 바뀌면 source-state가 바로 간다(SRC_READ만, 같은 조직만, VIEWER는 rejected) — 5초 이내 화면 반영")
+    void sourceState() throws Exception {
+        MvcResult r = open(org, admin, "sources");
+        awaitCount(r, "ready", 1);
+        assertThat(body(r)).contains("\"accepted\":[\"sources\"]");
+        long viewer = fx.user(org, "live.viewer.src", "VIEWER");
+        MvcResult v = open(org, viewer, "home,sources");
+        awaitCount(v, "ready", 1);
+        assertThat(body(v)).contains("\"rejected\":[\"sources\"]");
+        long other = fx.organization("live-src2");
+        MvcResult o = open(other, fx.user(other, "live2.admin", "ADMIN"), "sources");
+        awaitCount(o, "ready", 1);
+
+        hub.onEvent(DomainEvent.of(EventType.SOURCE_CONNECTION_CHANGED, org, new SourceConnectionChanged(source,
+                ConnectorState.CONNECTED, ConnectorState.ERROR, ConnectionErrorKind.AUTH, T0.plusSeconds(5)), null, clock));
+        awaitCount(r, "source-state", 1);
+        assertThat(body(r)).contains("{\"sourceId\":\"" + source + "\",\"state\":\"ERROR\",\"previousState\":\"CONNECTED\","
+                + "\"errorKind\":\"AUTH\",\"at\":\"2026-10-03T00:00:05Z\"}");
+
+        // 실제 RabbitMQ 경로(data2flow.events → 파드 임시 큐): 복구 이벤트는 errorKind 없이
+        DomainEvent<SourceConnectionChanged> up = DomainEvent.of(EventType.SOURCE_CONNECTION_CHANGED, org,
+                new SourceConnectionChanged(source, ConnectorState.ERROR, ConnectorState.CONNECTED, null, T0.plusSeconds(9)), null, clock);
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
+            if (count(r, "source-state") < 2) {
+                rabbit.convertAndSend(MessagingNames.EXCHANGE_EVENTS, up.type(), codec.write(up));
+            }
+            assertThat(body(r)).contains("\"state\":\"CONNECTED\",\"previousState\":\"ERROR\",\"at\"");
+        });
+        assertThat(count(v, "source-state")).isZero();
+        assertThat(count(o, "source-state")).isZero();
     }
 }

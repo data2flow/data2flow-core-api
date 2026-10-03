@@ -18,10 +18,11 @@ import java.util.Set;
  * @param payload        원본 payload를 볼 수 있다(INGEST_PAYLOAD_READ)
  * @param accepted       받은 토픽 이름
  * @param rejected       권한·범위 밖이라 이벤트가 없을 토픽 이름
+ * @param sources        {@code sources} 수락(SRC_READ)
  */
 public record Subscription(AccessGrant grant, boolean home, boolean ingest, Map<Long, Set<Long>> spaceTopics,
                            Map<Long, Set<String>> telemetry, List<LiveTopic.IngestMessages> messages, boolean payload,
-                           List<String> accepted, List<String> rejected) {
+                           List<String> accepted, List<String> rejected, boolean sources) {
 
     /** 이 공간의 기기 변경을 받을 space 토픽들 */
     public List<Long> spaceTopicsFor(Long deviceSpaceId) {

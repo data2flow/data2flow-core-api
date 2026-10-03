@@ -30,6 +30,7 @@ class LiveTopicTest {
                 new LiveTopic.Future("alarms"),
                 new LiveTopic.Future("commands:5"),
                 new LiveTopic.Future("analytics:run:9"));
+        assertThat(LiveTopic.parse("sources").valid()).containsExactly(new LiveTopic.Sources("sources"));
         assertThat(LiveTopic.parse("ingest-messages").valid()).containsExactly(new LiveTopic.IngestMessages("ingest-messages", null, null, null));
         assertThat(LiveTopic.parse("ingest-messages?deviceId=7").valid())
                 .containsExactly(new LiveTopic.IngestMessages("ingest-messages?deviceId=7", null, 7L, null));

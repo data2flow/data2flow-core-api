@@ -32,6 +32,14 @@ public final class LiveDtos {
     public record MetricUpdate(String key, double value, String unit, int quality, Instant at) {
     }
 
+    /**
+     * {@code source-state}(sources) — 소스 대표 연결 상태 변경(EVT-DSC-04). state·previousState는 CONNECTED·CONNECTING·DISCONNECTED·
+     * ERROR·DISABLED, errorKind는 실패 종류(정상이면 생략)
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record SourceState(String sourceId, String state, String previousState, String errorKind, Instant at) {
+    }
+
     /** {@code point}(telemetry:{deviceId}.{metric}) */
     public record Point(String deviceId, String metricKey, Instant t, double v, int quality, boolean virtual) {
     }

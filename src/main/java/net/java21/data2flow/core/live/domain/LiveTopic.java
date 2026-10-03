@@ -16,6 +16,7 @@ import java.util.regex.Pattern;
  *   <li>{@code space:{id}} → {@code device-update}(그 공간과 하위 공간의 기기)</li>
  *   <li>{@code telemetry:{deviceId}.{metric}} → {@code point}. 문서 예의 {@code d17} 표기도 받는다</li>
  *   <li>{@code ingest} → {@code ingest-stats}(5초)</li>
+ *   <li>{@code sources} → {@code source-state}(소스 대표 연결 상태가 바뀔 때, DSC-02.01 "5초 이내 화면 반영")</li>
  *   <li>{@code ingest-messages?sourceId=&deviceId=&result=} → {@code message}(초당 최대 20건)</li>
  *   <li>{@code notifications}·{@code alarms}·{@code commands:{id}}·{@code analytics:run:{id}}: 이후 마일스톤(M4~M6)의 토픽. 받아 두지만 M2에서는 이벤트가 없다</li>
  * </ul>
@@ -37,6 +38,10 @@ public sealed interface LiveTopic {
     }
 
     record Ingest(String raw) implements LiveTopic {
+    }
+
+    /** 조직의 데이터 소스 연결 상태 변경(SRC_READ) */
+    record Sources(String raw) implements LiveTopic {
     }
 
     /** 수집 메시지 필터. 비어 있는 조건은 null */
@@ -82,6 +87,9 @@ public sealed interface LiveTopic {
         }
         if ("ingest".equals(t)) {
             return new Ingest(t);
+        }
+        if ("sources".equals(t)) {
+            return new Sources(t);
         }
         if (FUTURE.matcher(t).matches()) {
             return new Future(t);

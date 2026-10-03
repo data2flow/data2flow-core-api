@@ -26,6 +26,7 @@ import java.util.Set;
  *   <li>{@code space:{id}}: DASHBOARD_READ + 그 공간(또는 하위 일부)이 범위 안. 범위 안 하위 공간의 기기만 보낸다</li>
  *   <li>{@code telemetry:{기기}.{항목}}: TS_READ + 기기의 공간이 범위 안(TC-DSH-051: 범위 밖 기기 토픽은 이벤트 0건)</li>
  *   <li>{@code ingest}·{@code ingest-messages}: INGEST_READ(OPERATOR 이상). 원본 payload는 INGEST_PAYLOAD_READ만</li>
+ *   <li>{@code sources}: SRC_READ(소스 화면을 볼 수 있는 역할)</li>
  * </ul>
  * 거부한 토픽은 이유를 밝히지 않고 {@code rejected}에 둔다(없는 것과 범위 밖을 구분하지 않음, BR-IAM-16).
  */
@@ -42,6 +43,7 @@ public class LiveSubscriptions {
         SpaceScope scope = grant.spaceScope();
         boolean home = false;
         boolean ingest = false;
+        boolean sources = false;
         Map<Long, Set<Long>> spaces = new HashMap<>();
         Map<Long, Set<String>> telemetry = new HashMap<>();
         List<LiveTopic.IngestMessages> messages = new ArrayList<>();
@@ -52,6 +54,7 @@ public class LiveSubscriptions {
             boolean ok = switch (topic) {
                 case LiveTopic.Home h -> home = grant.has(Permission.DASHBOARD_READ);
                 case LiveTopic.Ingest i -> ingest = grant.has(Permission.INGEST_READ);
+                case LiveTopic.Sources x -> sources = grant.has(Permission.SRC_READ);
                 case LiveTopic.Future f -> grant.has(Permission.DASHBOARD_READ);
                 case LiveTopic.Space s -> {
                     if (!grant.has(Permission.DASHBOARD_READ)) {
@@ -91,7 +94,7 @@ public class LiveSubscriptions {
             (ok ? accepted : rejected).add(topic.raw());
         }
         return new Subscription(grant, home, ingest, spaces, telemetry, List.copyOf(messages),
-                grant.has(Permission.INGEST_PAYLOAD_READ), List.copyOf(accepted), List.copyOf(rejected));
+                grant.has(Permission.INGEST_PAYLOAD_READ), List.copyOf(accepted), List.copyOf(rejected), sources);
     }
 
     /** 수집 메시지 필터의 소스·기기가 이 조직에 있고(기기는 범위 안) 볼 수 있는가 */
