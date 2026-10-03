@@ -97,6 +97,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
+        <!-- 실시간 화면(DSH-05.01): Super Stream data2flow.telemetry 소비(그룹 core-live, 비SAC·최신부터).
+             버전은 Spring Boot 관리. Apache-2.0 / MPL-2.0 이중 라이선스(ADR-018 허용) -->
+        <dependency>
+            <groupId>com.rabbitmq</groupId>
+            <artifactId>stream-client</artifactId>
+        </dependency>
         <!-- 초대·재설정·가입 신청 메일(OPS-07.02 메일 서버 설정으로 보냄) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

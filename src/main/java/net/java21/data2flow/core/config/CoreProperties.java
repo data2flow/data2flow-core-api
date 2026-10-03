@@ -42,7 +42,7 @@ public record CoreProperties(String webBaseUrl, String authBaseUrl, Tokens token
         ingressBaseUrl = ingressBaseUrl == null || ingressBaseUrl.isBlank() ? "http://data2flow-ingress" : stripSlash(ingressBaseUrl);
         pipelineBaseUrl = pipelineBaseUrl == null || pipelineBaseUrl.isBlank() ? "http://data2flow-pipeline" : stripSlash(pipelineBaseUrl);
         events = events == null ? new Events(null, null) : events;
-        live = live == null ? new Live(null, null) : live;
+        live = live == null ? new Live(null, null, null, null, null, null, null, null, null, null, null, null) : live;
     }
 
     private static String stripSlash(String url) {
@@ -141,15 +141,40 @@ public record CoreProperties(String webBaseUrl, String authBaseUrl, Tokens token
     }
 
     /**
-     * 실시간 화면(SSE). {@code data2flow.telemetry}를 소비자 그룹 {@code core-live}(로컬은 {@code core-live-<developer>})로 최신부터 읽는다.
+     * 실시간 화면(SSE, API-DSH-20·21). {@code data2flow.telemetry}를 소비자 그룹 {@code core-live}(로컬은 {@code core-live-<developer>})로
+     * 최신부터 읽고(비SAC, 오프셋 저장 없음), {@code data2flow.events}는 파드마다 하나인 임시 큐(exclusive·auto-delete)로 받는다.
+     * 둘 다 손실 허용이다: RabbitMQ가 없으면 서비스는 그대로 뜨고 소비자는 뒤에서 다시 붙는다.
      *
-     * @param telemetryEnabled 텔레메트리 스트림 소비 실행(테스트·로컬은 끌 수 있다)
-     * @param developer        로컬 개발자 이름(소비자 그룹 접미사, deployment.md §8.2). 운영·staging은 비운다
+     * @param telemetryEnabled  텔레메트리 스트림 소비 실행(테스트는 끄고, 스트림 IT만 켠다)
+     * @param developer         로컬 개발자 이름(소비자 그룹 접미사, deployment.md §8.2). 운영·staging은 비운다
+     * @param eventsEnabled     도메인 이벤트 파드별 구독 실행
+     * @param schedulerEnabled  주기 작업(ping·세션 확인·홈 묶음·수집 통계·메시지 폴링) 실행. 테스트는 끄고 직접 부른다
+     * @param pingInterval      {@code event: ping} 간격(15초). 이때 세션 폐기·사용자 상태도 확인한다
+     * @param emitterTimeout    연결 최대 유지 시간(15분). 지나면 서버가 닫고 브라우저(BFF)가 새 Access 토큰으로 다시 연결한다
+     *                          (auth.md §8 "토큰이 만료되면 서버가 연결을 끊는다")
+     * @param permissionRecheck 연결 중 권한·공간 범위 재검사 간격(60초, TC-DSH-051)
+     * @param homeInterval      {@code home-summary} 묶음 간격(5초)
+     * @param ingestInterval    {@code ingest-stats} 간격(5초)
+     * @param messagePoll       {@code ingest-messages} 원본 메시지 폴링 간격(1초)
+     * @param streamRetry       텔레메트리 스트림 연결 실패 시 다시 시도 간격(30초)
+     * @param queueCapacity     연결마다 보낼 이벤트 대기열 상한(1000). 넘치면 버린다(손실 허용, 느린 클라이언트가 소비자를 막지 않게)
      */
-    public record Live(Boolean telemetryEnabled, String developer) {
+    public record Live(Boolean telemetryEnabled, String developer, Boolean eventsEnabled, Boolean schedulerEnabled,
+                       Duration pingInterval, Duration emitterTimeout, Duration permissionRecheck, Duration homeInterval,
+                       Duration ingestInterval, Duration messagePoll, Duration streamRetry, Integer queueCapacity) {
         public Live {
             telemetryEnabled = telemetryEnabled == null || telemetryEnabled;
             developer = developer == null || developer.isBlank() ? null : developer.strip();
+            eventsEnabled = eventsEnabled == null || eventsEnabled;
+            schedulerEnabled = schedulerEnabled == null || schedulerEnabled;
+            pingInterval = pingInterval == null ? Duration.ofSeconds(15) : pingInterval;
+            emitterTimeout = emitterTimeout == null ? Duration.ofMinutes(15) : emitterTimeout;
+            permissionRecheck = permissionRecheck == null ? Duration.ofSeconds(60) : permissionRecheck;
+            homeInterval = homeInterval == null ? Duration.ofSeconds(5) : homeInterval;
+            ingestInterval = ingestInterval == null ? Duration.ofSeconds(5) : ingestInterval;
+            messagePoll = messagePoll == null ? Duration.ofSeconds(1) : messagePoll;
+            streamRetry = streamRetry == null ? Duration.ofSeconds(30) : streamRetry;
+            queueCapacity = queueCapacity == null || queueCapacity < 10 ? 1000 : queueCapacity;
         }
     }
 }
