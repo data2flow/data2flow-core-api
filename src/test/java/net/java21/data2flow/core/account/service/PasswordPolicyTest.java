@@ -37,7 +37,7 @@ class PasswordPolicyTest {
     }
 
     private static CoreProperties properties(boolean hibp, String url) {
-        return new CoreProperties(null, null, null, null, null, new CoreProperties.Password(hibp, url), null, null);
+        return new CoreProperties(null, null, null, null, null, new CoreProperties.Password(hibp, url), null, null, null, null, null, null, null);
     }
 
     @Test

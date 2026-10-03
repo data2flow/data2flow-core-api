@@ -10,3 +10,9 @@ data2flow:
       relay-enabled: false
     jobs:
       enabled: false
+    # 로컬은 이벤트 큐(core.events)를 소비하지 않는다: vhost data2flow-dev를 개발자끼리 함께 쓰므로 같은 큐를 나눠 갖게 된다
+    events:
+      listener-enabled: false
+    # 실시간 화면의 텔레메트리 소비자 그룹 접미사(core-live-<이름>, deployment.md §8.2)
+    live:
+      developer: ${DATA2FLOW_DEVELOPER:}

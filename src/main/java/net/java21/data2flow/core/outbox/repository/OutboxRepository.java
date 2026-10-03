@@ -34,17 +34,23 @@ public class OutboxRepository {
                 .update();
     }
 
-    /** 보낼 행을 잠그고 가져온다. 다른 파드가 잡은 행은 건너뛴다(FOR UPDATE SKIP LOCKED) */
-    @OrganizationScopeExempt("릴레이는 모든 조직의 아웃박스를 처리한다")
-    public List<OutboxMessage> lockUnsent(int limit) {
+    /**
+     * 보낼 행을 잠그고 가져온다. 다른 파드가 잡은 행은 건너뛴다(FOR UPDATE SKIP LOCKED).
+     *
+     * @param onlyOrganizationId 배포 조직이 정해졌으면 그 조직의 행만(ADR-030: staging·prod가 DB를 함께 쓰므로 staging 파드가
+     *                           prod 조직의 이벤트를 staging vhost로 보내지 않게 한다). null이면 모든 조직
+     */
+    @OrganizationScopeExempt("릴레이는 모든 조직(또는 배포 조직)의 아웃박스를 처리한다")
+    public List<OutboxMessage> lockUnsent(int limit, Long onlyOrganizationId) {
         return jdbc.sql("""
                         SELECT id, organization_id, kind, exchange, routing_key, payload::text AS payload, attempts
                           FROM data2flow_core.outboxes
                          WHERE sent_at IS NULL
+                           AND (CAST(:org AS bigint) IS NULL OR organization_id = :org)
                          ORDER BY created_at, id
                          LIMIT :limit
                          FOR UPDATE SKIP LOCKED""")
-                .param("limit", limit)
+                .param("limit", limit).param("org", onlyOrganizationId)
                 .query((rs, n) -> new OutboxMessage(rs.getLong("id"), rs.getLong("organization_id"), rs.getString("kind"),
                         rs.getString("exchange"), rs.getString("routing_key"), rs.getString("payload"), rs.getInt("attempts")))
                 .list();

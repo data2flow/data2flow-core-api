@@ -58,6 +58,17 @@ public class OutboxWriter {
         return messageId;
     }
 
+    /**
+     * 이미 직렬화한 메시지(계약 봉투 {@code DomainEvent}·{@code ConfigChangedMessage})를 그대로 기록한다. 본문에 {@code v}·{@code messageId}가
+     * 들어 있어야 한다(릴레이가 헤더로 싣는다). 같은 messageId는 한 번만 기록된다.
+     *
+     * @param kind {@code EVENT}(data2flow.events) 또는 {@code CONFIG}(data2flow.config)
+     */
+    public void message(long organizationId, String kind, String exchange, String routingKey, String messageId, String payloadJson) {
+        repository.insert(organizationId, Tokens.sha256Hex(kind + "|" + messageId), kind, exchange, routingKey, payloadJson,
+                clock.instant());
+    }
+
     /** API-IAM-37b 본문 {sids, jtis, reason} */
     public void authBlacklist(long organizationId, java.util.Collection<String> sids, java.util.Collection<String> jtis,
                               String reason) {

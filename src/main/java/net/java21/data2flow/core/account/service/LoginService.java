@@ -15,6 +15,7 @@ import net.java21.data2flow.core.audit.service.Audits;
 import net.java21.data2flow.core.common.CoreErrorCode;
 import net.java21.data2flow.core.organization.domain.OrganizationModels.SecurityPolicy;
 import net.java21.data2flow.core.organization.repository.OrganizationRepository;
+import net.java21.data2flow.core.organization.service.DeploymentOrganization;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -44,6 +45,7 @@ public class LoginService {
 
     private final UserRepository users;
     private final OrganizationRepository organizations;
+    private final DeploymentOrganization deployment;
     private final PasswordEncoder encoder;
     private final Audits audits;
     private final IamEventPublisher events;
@@ -51,10 +53,12 @@ public class LoginService {
     private final TransactionTemplate tx;
     private final String dummyHash;
 
-    public LoginService(UserRepository users, OrganizationRepository organizations, PasswordEncoder encoder, Audits audits,
+    public LoginService(UserRepository users, OrganizationRepository organizations, DeploymentOrganization deployment,
+                        PasswordEncoder encoder, Audits audits,
                         IamEventPublisher events, Clock clock, PlatformTransactionManager txManager) {
         this.users = users;
         this.organizations = organizations;
+        this.deployment = deployment;
         this.encoder = encoder;
         this.audits = audits;
         this.events = events;
@@ -76,10 +80,13 @@ public class LoginService {
     }
 
     private Outcome decide(String loginId, VerifyCredentialsRequest req) {
-        List<AppUser> candidates = users.lockByLoginId(loginId);
+        // ADR-030: staging·prod가 DB를 함께 쓰므로 배포 조직이 정해져 있으면 그 조직의 계정만 본다
+        List<AppUser> candidates = deployment.configured()
+                ? deployment.current().map(org -> users.lockByLoginId(org.id(), loginId)).orElse(List.of())
+                : users.lockByLoginId(loginId);
         if (candidates.size() != 1) {
             encoder.matches(req.password(), dummyHash);
-            organizations.findSingleActive().ifPresent(org -> recordFailure(org.id(), null, loginId, req, "UNKNOWN_LOGIN_ID"));
+            deployment.current().ifPresent(org -> recordFailure(org.id(), null, loginId, req, "UNKNOWN_LOGIN_ID"));
             return Outcome.failed();
         }
         AppUser user = candidates.get(0);

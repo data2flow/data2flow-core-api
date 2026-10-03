@@ -28,6 +28,7 @@ import net.java21.data2flow.core.organization.domain.OrganizationModels.OrgSetti
 import net.java21.data2flow.core.organization.domain.OrganizationModels.Organization;
 import net.java21.data2flow.core.organization.domain.OrganizationModels.SecurityPolicy;
 import net.java21.data2flow.core.organization.repository.OrganizationRepository;
+import net.java21.data2flow.core.organization.service.DeploymentOrganization;
 import net.java21.data2flow.core.role.repository.RoleRepository;
 import net.java21.data2flow.core.role.service.RoleAssignments;
 import net.java21.data2flow.core.role.service.RoleAssignments.Assignment;
@@ -71,6 +72,7 @@ public class SignupService {
     private final UserRepository users;
     private final RoleRepository roles;
     private final OrganizationRepository organizations;
+    private final DeploymentOrganization deployment;
     private final PasswordHistoryRepository history;
     private final RoleAssignments assignments;
     private final PasswordPolicy policy;
@@ -84,13 +86,14 @@ public class SignupService {
     private final Clock clock;
 
     public SignupService(SignupRequestRepository signups, UserRepository users, RoleRepository roles,
-                         OrganizationRepository organizations, PasswordHistoryRepository history, RoleAssignments assignments,
+                         OrganizationRepository organizations, DeploymentOrganization deployment, PasswordHistoryRepository history, RoleAssignments assignments,
                          PasswordPolicy policy, PasswordEncoder encoder, MailService mail, MailLinks links, RoleChecker roleChecker,
                          IamEventPublisher events, Audits audits, CoreProperties properties, Clock clock) {
         this.signups = signups;
         this.users = users;
         this.roles = roles;
         this.organizations = organizations;
+        this.deployment = deployment;
         this.history = history;
         this.assignments = assignments;
         this.policy = policy;
@@ -110,7 +113,7 @@ public class SignupService {
      */
     @Transactional(readOnly = true)
     public SignupSettingsResponse publicSettings() {
-        boolean enabled = organizations.findSingleActive()
+        boolean enabled = deployment.current()
                 .map(org -> organizations.findPolicy(org.id()).orElse(SecurityPolicy.defaults(org.id())).signupRequestEnabled())
                 .orElse(false);
         return new SignupSettingsResponse(enabled);
@@ -119,7 +122,7 @@ public class SignupService {
     /** API-IAM-67 신청(공개). 성공·이메일 중복 모두 202 */
     @Transactional
     public void create(CreateSignupRequest req, String ip) {
-        Organization org = organizations.findSingleActive().orElseThrow(() -> new BusinessException(CoreErrorCode.SIGNUP_DISABLED));
+        Organization org = deployment.current().orElseThrow(() -> new BusinessException(CoreErrorCode.SIGNUP_DISABLED));
         SecurityPolicy p = organizations.findPolicy(org.id()).orElse(SecurityPolicy.defaults(org.id()));
         if (!p.signupRequestEnabled()) {
             throw new BusinessException(CoreErrorCode.SIGNUP_DISABLED);

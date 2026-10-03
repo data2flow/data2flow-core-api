@@ -30,8 +30,16 @@ spring:
     password: ${DATA2FLOW_RABBITMQ_PASSWORD:guest}
     publisher-confirm-type: correlated
     connection-timeout: 5s
+    # RabbitMQ Stream(Super Stream data2flow.telemetry, 실시간 화면). 운영은 10.116.64.14:5552(내부망 전용)
+    stream:
+      host: ${DATA2FLOW_RABBITMQ_HOST:localhost}
+      port: ${DATA2FLOW_RABBITMQ_STREAM_PORT:5552}
+      virtual-host: ${DATA2FLOW_RABBITMQ_VHOST:data2flow-dev}
+      username: ${DATA2FLOW_RABBITMQ_USERNAME:guest}
+      password: ${DATA2FLOW_RABBITMQ_PASSWORD:guest}
   messages:
-    basename: messages
+    # 도메인별 문구 묶음(ADR-037: ko 원문, en·ja·zh). 오류 문구 키는 error.<코드>
+    basename: messages,i18n/space,i18n/device,i18n/source,i18n/script,i18n/telemetry,i18n/live
     encoding: UTF-8
     fallback-to-system-locale: false
 server:
@@ -83,6 +91,10 @@ data2flow:
     auth-base-url: ${DATA2FLOW_AUTH_BASE_URL:http://data2flow-auth}
     # ADR-030: DB를 staging·prod가 함께 쓰므로 migrate는 staging 배포에서만(application-staging.yml)
     flyway-mode: validate
+    # ADR-030: 이 배포가 맡는 조직 코드(staging 전용 조직). 비우면 ACTIVE 조직이 하나일 때 그 조직(ADR-004)
+    organization-code: ${DATA2FLOW_ORGANIZATION_CODE:}
+    ingress-base-url: ${DATA2FLOW_INGRESS_BASE_URL:http://data2flow-ingress}
+    pipeline-base-url: ${DATA2FLOW_PIPELINE_BASE_URL:http://data2flow-pipeline}
     password:
       hibp-enabled: ${DATA2FLOW_PASSWORD_HIBP_ENABLED:false}
     bootstrap:

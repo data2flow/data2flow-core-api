@@ -16,10 +16,18 @@ import java.time.Duration;
  * @param bootstrap    최초 관리자 생성 Job(IAM-01.02)
  * @param flywayMode   {@code validate}(기본·prod·local) 또는 {@code migrate}(staging 배포·테스트). ADR-030: DB 하나를 함께 쓰므로
  *                     migrate는 staging 배포 때만 한다
+ * @param organizationCode 이 배포가 맡는 조직 코드({@code DATA2FLOW_ORGANIZATION_CODE}). staging과 prod가 DB 하나를 함께 쓰고
+ *                     staging은 전용 조직을 쓰므로(ADR-030) "단일 조직"을 찾는 공개 경로·로그인·아웃박스 릴레이·조직 전체 내부 조회가
+ *                     이 값으로 조직을 정한다. 비우면 ACTIVE 조직이 하나일 때 그 조직(v1 단일 조직, ADR-004)
+ * @param ingressBaseUrl  data2flow-ingress 내부 주소(연결 테스트 API-DSC-51, 원본 샘플 API-DSC-52). 기본 {@code http://data2flow-ingress}
+ * @param pipelineBaseUrl data2flow-pipeline 내부 주소(재처리 API-ING-22·23, 스크립트 검사·테스트 API-SCR-30·31). 기본 {@code http://data2flow-pipeline}
+ * @param events       도메인 이벤트 소비({@code core.events})
+ * @param live         실시간 화면(SSE, API-DSH-20)
  */
 @ConfigurationProperties(prefix = "data2flow.core")
 public record CoreProperties(String webBaseUrl, String authBaseUrl, Tokens tokens, Outbox outbox, Jobs jobs,
-                             Password password, Bootstrap bootstrap, String flywayMode) {
+                             Password password, Bootstrap bootstrap, String flywayMode, String organizationCode,
+                             String ingressBaseUrl, String pipelineBaseUrl, Events events, Live live) {
 
     public CoreProperties {
         webBaseUrl = webBaseUrl == null || webBaseUrl.isBlank() ? "https://data2flow.java21.net" : stripSlash(webBaseUrl);
@@ -30,6 +38,11 @@ public record CoreProperties(String webBaseUrl, String authBaseUrl, Tokens token
         password = password == null ? new Password(null, null) : password;
         bootstrap = bootstrap == null ? new Bootstrap(null, null, null, null, null, null, null, null, null) : bootstrap;
         flywayMode = flywayMode == null || flywayMode.isBlank() ? "validate" : flywayMode;
+        organizationCode = organizationCode == null || organizationCode.isBlank() ? null : organizationCode.strip();
+        ingressBaseUrl = ingressBaseUrl == null || ingressBaseUrl.isBlank() ? "http://data2flow-ingress" : stripSlash(ingressBaseUrl);
+        pipelineBaseUrl = pipelineBaseUrl == null || pipelineBaseUrl.isBlank() ? "http://data2flow-pipeline" : stripSlash(pipelineBaseUrl);
+        events = events == null ? new Events(null, null) : events;
+        live = live == null ? new Live(null, null) : live;
     }
 
     private static String stripSlash(String url) {
@@ -111,6 +124,32 @@ public record CoreProperties(String webBaseUrl, String authBaseUrl, Tokens token
             organizationCode = organizationCode == null || organizationCode.isBlank() ? "default" : organizationCode;
             organizationName = organizationName == null || organizationName.isBlank() ? "data2flow" : organizationName;
             adminName = adminName == null || adminName.isBlank() ? "관리자" : adminName;
+        }
+    }
+
+    /**
+     * 도메인 이벤트 소비(큐 {@code core.events}, architecture.md §4.3).
+     *
+     * @param listenerEnabled 소비자 실행(로컬 기본 꺼짐: 개발자끼리 vhost data2flow-dev를 함께 쓰므로 같은 큐를 나눠 갖지 않게)
+     * @param concurrency     동시 소비자 수(기본 2)
+     */
+    public record Events(Boolean listenerEnabled, Integer concurrency) {
+        public Events {
+            listenerEnabled = listenerEnabled == null || listenerEnabled;
+            concurrency = concurrency == null || concurrency < 1 ? 2 : concurrency;
+        }
+    }
+
+    /**
+     * 실시간 화면(SSE). {@code data2flow.telemetry}를 소비자 그룹 {@code core-live}(로컬은 {@code core-live-<developer>})로 최신부터 읽는다.
+     *
+     * @param telemetryEnabled 텔레메트리 스트림 소비 실행(테스트·로컬은 끌 수 있다)
+     * @param developer        로컬 개발자 이름(소비자 그룹 접미사, deployment.md §8.2). 운영·staging은 비운다
+     */
+    public record Live(Boolean telemetryEnabled, String developer) {
+        public Live {
+            telemetryEnabled = telemetryEnabled == null || telemetryEnabled;
+            developer = developer == null || developer.isBlank() ? null : developer.strip();
         }
     }
 }

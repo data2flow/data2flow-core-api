@@ -67,7 +67,7 @@ class CommonUtilitiesTest {
     @Test
     @DisplayName("[conventions §4] 설정 기본값: 초대 72시간, 재설정 30분, 회전 유예 30초, Flyway validate")
     void propertiesDefaults() {
-        CoreProperties p = new CoreProperties("https://x/", null, null, null, null, null, null, null);
+        CoreProperties p = new CoreProperties("https://x/", null, null, null, null, null, null, null, null, null, null, null, null);
         assertThat(p.webBaseUrl()).isEqualTo("https://x");
         assertThat(p.authBaseUrl()).isEqualTo("http://data2flow-auth");
         assertThat(p.tokens().invitation()).isEqualTo(Duration.ofHours(72));
@@ -83,7 +83,7 @@ class CommonUtilitiesTest {
     @Test
     @DisplayName("[ADR-037] 메일 링크는 ko만 접두사 없이, 시각은 받는 사람 시간대로")
     void mailLinks() {
-        MailLinks links = new MailLinks(new CoreProperties("https://web", null, null, null, null, null, null, null));
+        MailLinks links = new MailLinks(new CoreProperties("https://web", null, null, null, null, null, null, null, null, null, null, null, null));
         assertThat(links.link("/invitations/t", Locale.KOREAN)).isEqualTo("https://web/invitations/t");
         assertThat(links.link("/invitations/t", Locale.JAPANESE)).isEqualTo("https://web/ja/invitations/t");
         assertThat(MailLinks.format(Instant.parse("2026-10-03T00:00:00Z"), "Asia/Seoul")).isEqualTo("2026-10-03 09:00 (Asia/Seoul)");

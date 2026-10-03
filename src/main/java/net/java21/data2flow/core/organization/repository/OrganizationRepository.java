@@ -35,6 +35,13 @@ public class OrganizationRepository {
                 .param("code", code).query(OrganizationRepository::mapOrg).optional();
     }
 
+    /** 배포 설정 조직(ADR-030, {@code DATA2FLOW_ORGANIZATION_CODE}). ACTIVE일 때만 */
+    @OrganizationScopeExempt("배포 설정의 조직 코드로 이 배포의 조직을 찾는다(ADR-030)")
+    public Optional<Organization> findActiveByCode(String code) {
+        return jdbc.sql("SELECT id, code, name, timezone, locale, status FROM data2flow_core.organizations WHERE code = :code AND status = 'ACTIVE'")
+                .param("code", code).query(OrganizationRepository::mapOrg).optional();
+    }
+
     /** v1 단일 조직(ADR-004): 로그인 아이디만 오는 공개 경로(가입 신청 등)의 조직. 조직이 정확히 하나일 때만 돌려준다 */
     @OrganizationScopeExempt("v1 단일 조직: 공개 경로는 요청에 조직이 없다")
     public Optional<Organization> findSingleActive() {

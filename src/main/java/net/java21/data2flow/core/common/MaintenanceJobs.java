@@ -3,6 +3,7 @@ package net.java21.data2flow.core.common;
 import net.java21.data2flow.contracts.idempotency.IdempotencyStore;
 import net.java21.data2flow.core.audit.repository.AuditLogRepository;
 import net.java21.data2flow.core.invitation.repository.InvitationRepository;
+import net.java21.data2flow.core.messaging.repository.ProcessedMessageRepository;
 import net.java21.data2flow.core.outbox.service.OutboxRelay;
 import net.java21.data2flow.core.signup.service.SignupService;
 import org.slf4j.Logger;
@@ -24,7 +25,7 @@ import java.time.ZoneOffset;
  * <ul>
  *   <li>감사 로그 월 파티션을 이번 달부터 3개월 앞까지 만든다(ERD README §10)</li>
  *   <li>72시간 지난 초대 → EXPIRED(domain-model §3.2), 기한 지난 가입 신청 → EXPIRED(§3.4)</li>
- *   <li>멱등 키 24시간 지난 것 삭제(BR-OPS-20), 보낸 아웃박스 7일 지난 것 삭제(ERD README §14)</li>
+ *   <li>멱등 키 24시간 지난 것 삭제(BR-OPS-20), 보낸 아웃박스 7일 지난 것 삭제(ERD README §14), 소비 기록 7일 지난 것 삭제</li>
  * </ul>
  */
 @Component
@@ -40,18 +41,20 @@ public class MaintenanceJobs {
     private final SignupService signups;
     private final IdempotencyStore idempotency;
     private final OutboxRelay outbox;
+    private final ProcessedMessageRepository processed;
     private final JdbcClient jdbc;
     private final TransactionTemplate tx;
     private final Clock clock;
 
     public MaintenanceJobs(AuditLogRepository auditLogs, InvitationRepository invitations, SignupService signups,
-                           IdempotencyStore idempotency, OutboxRelay outbox, JdbcClient jdbc, PlatformTransactionManager txManager,
-                           Clock clock) {
+                           IdempotencyStore idempotency, OutboxRelay outbox, ProcessedMessageRepository processed, JdbcClient jdbc,
+                           PlatformTransactionManager txManager, Clock clock) {
         this.auditLogs = auditLogs;
         this.invitations = invitations;
         this.signups = signups;
         this.idempotency = idempotency;
         this.outbox = outbox;
+        this.processed = processed;
         this.jdbc = jdbc;
         this.tx = new TransactionTemplate(txManager);
         this.clock = clock;
@@ -69,7 +72,9 @@ public class MaintenanceJobs {
             int signupsExpired = signups.expire();
             int keys = idempotency.deleteExpired(now);
             int sent = outbox.purgeSent();
-            log.info("정리 작업: 초대 만료 {}, 가입 신청 만료 {}, 멱등 키 삭제 {}, 아웃박스 삭제 {}", invitationsExpired, signupsExpired, keys, sent);
+            int consumed = processed.deleteBefore(now.minus(java.time.Duration.ofDays(7)));
+            log.info("정리 작업: 초대 만료 {}, 가입 신청 만료 {}, 멱등 키 삭제 {}, 아웃박스 삭제 {}, 소비 기록 삭제 {}", invitationsExpired,
+                    signupsExpired, keys, sent, consumed);
             return true;
         });
         if (Boolean.TRUE.equals(ran)) {

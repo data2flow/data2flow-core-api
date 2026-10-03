@@ -19,6 +19,7 @@ import net.java21.data2flow.core.config.CoreProperties;
 import net.java21.data2flow.core.mail.service.MailLinks;
 import net.java21.data2flow.core.mail.service.MailService;
 import net.java21.data2flow.core.organization.repository.OrganizationRepository;
+import net.java21.data2flow.core.organization.service.DeploymentOrganization;
 import net.java21.data2flow.core.passwordreset.repository.PasswordResetTokenRepository;
 import net.java21.data2flow.core.passwordreset.repository.PasswordResetTokenRepository.ResetToken;
 import net.java21.data2flow.core.session.domain.RefreshToken.RevokeReason;
@@ -47,6 +48,7 @@ public class PasswordResetService {
 
     private final UserRepository users;
     private final OrganizationRepository organizations;
+    private final DeploymentOrganization deployment;
     private final PasswordResetTokenRepository resetTokens;
     private final PasswordHistoryRepository history;
     private final PasswordPolicy policy;
@@ -60,12 +62,13 @@ public class PasswordResetService {
     private final Clock clock;
     private final InMemoryRateLimiter ipLimiter;
 
-    public PasswordResetService(UserRepository users, OrganizationRepository organizations, PasswordResetTokenRepository resetTokens,
+    public PasswordResetService(UserRepository users, OrganizationRepository organizations, DeploymentOrganization deployment, PasswordResetTokenRepository resetTokens,
                                 PasswordHistoryRepository history, PasswordPolicy policy, PasswordEncoder encoder,
                                 SessionRevocations revocations, MailService mail, MailLinks links, IamEventPublisher events,
                                 Audits audits, CoreProperties properties, Clock clock) {
         this.users = users;
         this.organizations = organizations;
+        this.deployment = deployment;
         this.resetTokens = resetTokens;
         this.history = history;
         this.policy = policy;
@@ -88,7 +91,7 @@ public class PasswordResetService {
             throw new BusinessException(CommonErrorCode.AUTH_RATE_LIMITED, retry.getAsLong())
                     .withHeader("Retry-After", Long.toString(retry.getAsLong()));
         }
-        var org = organizations.findSingleActive().orElse(null);
+        var org = deployment.current().orElse(null);
         if (org == null) {
             return;
         }

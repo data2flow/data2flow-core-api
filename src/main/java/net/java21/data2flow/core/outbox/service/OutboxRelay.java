@@ -1,6 +1,7 @@
 package net.java21.data2flow.core.outbox.service;
 
 import net.java21.data2flow.core.config.CoreProperties;
+import net.java21.data2flow.core.organization.service.DeploymentOrganization;
 import net.java21.data2flow.core.outbox.repository.OutboxRepository;
 import net.java21.data2flow.core.outbox.repository.OutboxRepository.OutboxMessage;
 import org.slf4j.Logger;
@@ -13,10 +14,12 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.OptionalLong;
 
 /**
  * 아웃박스 릴레이(ERD README §11.1). 보내지 않은 행을 {@code FOR UPDATE SKIP LOCKED}로 잠가 파드 여러 개가 나눠 보내고,
  * 대상의 확인(RabbitMQ confirm, auth 2xx)을 받은 뒤 sent_at을 쓴다. 실패한 행은 다음 주기에 다시 보낸다(최소 1회).
+ * 배포 조직이 정해져 있으면({@link DeploymentOrganization}) 그 조직의 행만 보낸다(ADR-030).
  */
 @Component
 public class OutboxRelay {
@@ -27,14 +30,16 @@ public class OutboxRelay {
     private final List<OutboxDispatcher> dispatchers;
     private final TransactionTemplate tx;
     private final CoreProperties properties;
+    private final DeploymentOrganization deployment;
     private final Clock clock;
 
     public OutboxRelay(OutboxRepository repository, List<OutboxDispatcher> dispatchers, PlatformTransactionManager txManager,
-                       CoreProperties properties, Clock clock) {
+                       CoreProperties properties, DeploymentOrganization deployment, Clock clock) {
         this.repository = repository;
         this.dispatchers = dispatchers;
         this.tx = new TransactionTemplate(txManager);
         this.properties = properties;
+        this.deployment = deployment;
         this.clock = clock;
     }
 
@@ -42,7 +47,9 @@ public class OutboxRelay {
     public int relayOnce() {
         Integer sent = tx.execute(status -> {
             int count = 0;
-            for (OutboxMessage message : repository.lockUnsent(properties.outbox().batchSize())) {
+            OptionalLong only = deployment.restriction();
+            Long org = only.isPresent() ? only.getAsLong() : null;
+            for (OutboxMessage message : repository.lockUnsent(properties.outbox().batchSize(), org)) {
                 try {
                     dispatcherFor(message).dispatch(message);
                     repository.markSent(message.id(), clock.instant());

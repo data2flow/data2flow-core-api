@@ -59,6 +59,12 @@ public class UserRepository {
                 .param("login", loginIdLower).query(UserRepository::map).list();
     }
 
+    /** 배포 조직이 정해졌을 때(ADR-030 staging 전용 조직) 그 조직 안에서만 로그인 아이디로 찾는다 */
+    public List<AppUser> lockByLoginId(long organizationId, String loginIdLower) {
+        return jdbc.sql("SELECT " + COLUMNS + " FROM data2flow_core.app_users u WHERE u.organization_id = :org AND lower(u.login_id) = :login AND u.status <> 'DELETED' FOR UPDATE")
+                .param("org", organizationId).param("login", loginIdLower).query(UserRepository::map).list();
+    }
+
     /** 로그인 아이디 또는 이메일(API-IAM-13 재설정 요청) */
     public Optional<AppUser> findByLoginIdOrEmail(long organizationId, String value) {
         return jdbc.sql("SELECT " + COLUMNS + """

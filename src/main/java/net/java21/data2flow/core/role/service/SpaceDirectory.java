@@ -4,7 +4,7 @@ import java.util.Collection;
 import java.util.Set;
 
 /**
- * 공간 트리(DEV-01.01)에 대한 권한 쪽 확장 지점. 공간 단위 권한(IAM-04.02·04.05·04.06)은 공간 계층이 생기는 M2에서 채운다.
+ * 공간 트리(DEV-01.01)에 대한 권한 쪽 확장 지점(IAM-04.02·04.05·04.06). 구현은 {@link DbSpaceDirectory}.
  *
  * <ul>
  *   <li>{@link #existingSpaceIds}: 역할·초대·승인에 지정한 공간이 조직에 있는지(없으면 {@code SPACE_SCOPE_INVALID})</li>

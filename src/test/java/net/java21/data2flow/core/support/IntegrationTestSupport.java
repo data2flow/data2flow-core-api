@@ -26,7 +26,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 /**
  * 통합 테스트 기반(design/testing/backend.md §3 "서비스 전체 *IT"): Testcontainers PostgreSQL 18 + RabbitMQ 3.13, 테스트 SMTP(GreenMail),
  * auth 대역 HTTP 서버. 컨테이너는 JVM에 하나씩만 띄워 모든 IT가 함께 쓴다. 실제 s3·s4 인프라에는 붙지 않는다.
- * 테스트마다 IAM 테이블을 비우고(감사 로그는 INSERT 전용이라 남는다 — 조직 ID가 매번 달라 섞이지 않는다) 시계를 T0로 되돌린다.
+ * 테스트마다 업무 테이블(data2flow_core 전체 + 테스트용 data2flow_pipeline)을 비우고(감사 로그는 INSERT 전용이라 남는다 — 조직 ID가
+ * 매번 달라 섞이지 않는다) 시계를 T0로 되돌린다. pipeline 소유 스키마는 {@link TestDatabase#createPipelineSchema}가 문서 DDL로 만든다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -43,6 +44,7 @@ public abstract class IntegrationTestSupport {
         POSTGRES.start();
         RABBIT.start();
         MAIL.start();
+        TestDatabase.createPipelineSchema(POSTGRES);
     }
 
     @DynamicPropertySource
@@ -66,16 +68,14 @@ public abstract class IntegrationTestSupport {
     protected JdbcClient jdbc;
     @Autowired
     protected Fixtures fx;
+    /** M2 테스트 데이터(공간·소스·모델·기기·시계열) */
+    protected M2Data data;
 
     @BeforeEach
     void resetState() throws Exception {
         clock.set(MutableClock.T0);
-        jdbc.sql("""
-                TRUNCATE data2flow_core.organizations, data2flow_core.app_users, data2flow_core.custom_roles,
-                    data2flow_core.invitations, data2flow_core.signup_requests, data2flow_core.refresh_tokens,
-                    data2flow_core.external_service_config, data2flow_core.outboxes, data2flow_core.idempotency_keys,
-                    data2flow_core.api_tokens, data2flow_core.service_accounts, data2flow_core.password_reset_tokens,
-                    data2flow_core.org_settings, data2flow_core.org_security_policies CASCADE""").update();
+        TestDatabase.truncateAll(jdbc);
+        data = new M2Data(jdbc);
         MAIL.purgeEmailFromAllMailboxes();
         AUTH.reset();
     }
