@@ -43,8 +43,9 @@ public class SpaceController {
     @GetMapping("/core/spaces")
     public ApiResponse<List<SpaceNode>> tree(@RequestParam(required = false) String rootId,
                                              @RequestParam(required = false) Integer depth,
-                                             @RequestParam(required = false) String include) {
-        return ApiResponse.success(service.tree(rootId, depth, include));
+                                             @RequestParam(required = false) String include,
+                                             @RequestParam(required = false) Boolean virtual) {
+        return ApiResponse.success(service.tree(rootId, depth, include, virtual));
     }
 
     /** 공간 상세(사전 작업으로 추가한 API) — 200 */

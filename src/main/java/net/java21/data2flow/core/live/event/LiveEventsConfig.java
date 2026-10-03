@@ -6,6 +6,7 @@ import net.java21.data2flow.contracts.message.MessageCodec;
 import net.java21.data2flow.contracts.message.MessageFormatException;
 import net.java21.data2flow.contracts.messaging.MessagingNames;
 import net.java21.data2flow.core.live.service.LiveHub;
+import net.java21.data2flow.core.live.service.SimRunStreams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AcknowledgeMode;
@@ -37,9 +38,21 @@ import java.util.UUID;
 public class LiveEventsConfig {
 
     /** 화면 갱신에 쓰는 이벤트(홈 요약 다시 계산, 공간 보기 기기 카드) */
-    public static final List<EventType> TYPES = List.of(EventType.DEVICE_CHANGED, EventType.DEVICE_CONNECTIVITY_CHANGED,
-            EventType.DEVICE_PENDING_CREATED, EventType.SPACE_CHANGED, EventType.GROUP_MEMBERSHIP_CHANGED,
-            EventType.SOURCE_CONNECTION_CHANGED, EventType.INGEST_ALERT_RAISED, EventType.INGEST_ALERT_CLEARED);
+    public static final List<EventType> TYPES = types();
+
+    private static List<EventType> types() {
+        List<EventType> types = new ArrayList<>(List.of(EventType.DEVICE_CHANGED, EventType.DEVICE_CONNECTIVITY_CHANGED,
+                EventType.DEVICE_PENDING_CREATED, EventType.SPACE_CHANGED, EventType.GROUP_MEMBERSHIP_CHANGED,
+                EventType.SOURCE_CONNECTION_CHANGED, EventType.INGEST_ALERT_RAISED, EventType.INGEST_ALERT_CLEARED,
+                // M3: 명령 상태(commands 토픽), 액추에이터 상태(space 토픽), 가상 환경 실행 스트림(API-SIM-31)
+                EventType.DEVICE_STATE_CHANGED, EventType.SIM_FAULT_STARTED, EventType.SIM_FAULT_ENDED));
+        for (EventType type : EventType.values()) {
+            if (type.routingKey().startsWith("command.status.") || type.routingKey().startsWith(EventType.SIM_RUN_PREFIX)) {
+                types.add(type);
+            }
+        }
+        return List.copyOf(types);
+    }
 
     private static final Logger log = LoggerFactory.getLogger(LiveEventsConfig.class);
 
@@ -56,18 +69,19 @@ public class LiveEventsConfig {
     }
 
     @Bean
-    SimpleMessageListenerContainer liveEventsContainer(ConnectionFactory connectionFactory, MessageCodec codec, LiveHub hub) {
+    SimpleMessageListenerContainer liveEventsContainer(ConnectionFactory connectionFactory, MessageCodec codec, LiveHub hub,
+                                                       SimRunStreams simRuns) {
         SimpleMessageListenerContainer container = new SimpleMessageListenerContainer(connectionFactory);
         container.setQueueNames(queueName);
         container.setAcknowledgeMode(AcknowledgeMode.NONE);
         container.setExclusive(true);
         container.setMissingQueuesFatal(false);
-        container.setMessageListener(message -> deliver(codec, hub, message.getBody()));
+        container.setMessageListener(message -> deliver(codec, hub, simRuns, message.getBody()));
         return container;
     }
 
     /** 한 건 전달. 형식 오류·모르는 종류·처리 실패는 버린다(화면용 손실 허용) */
-    static void deliver(MessageCodec codec, LiveHub hub, byte[] body) {
+    static void deliver(MessageCodec codec, LiveHub hub, SimRunStreams simRuns, byte[] body) {
         DomainEvent<?> event;
         try {
             event = codec.readEvent(body);
@@ -76,7 +90,12 @@ public class LiveEventsConfig {
             return;
         }
         try {
-            hub.onEvent(event);
+            if (event.payload() instanceof net.java21.data2flow.contracts.message.event.SimRunChanged
+                    || event.payload() instanceof net.java21.data2flow.contracts.message.event.SimFaultLabel) {
+                simRuns.onEvent(event);
+            } else {
+                hub.onEvent(event);
+            }
         } catch (RuntimeException ex) {
             log.warn("실시간 화면 이벤트 전달 실패(버림): {}", ex.toString());
         }

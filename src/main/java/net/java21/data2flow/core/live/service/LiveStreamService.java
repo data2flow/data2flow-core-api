@@ -85,6 +85,7 @@ public class LiveStreamService {
                 case LiveTopic.IngestMessages m -> Permission.INGEST_READ;
                 case LiveTopic.Telemetry tm -> Permission.TS_READ;
                 case LiveTopic.Sources so -> Permission.SRC_READ;
+                case LiveTopic.Commands co -> Permission.DEV_READ;
                 default -> Permission.DASHBOARD_READ;
             };
             if (!grant.has(needed)) {

@@ -5,7 +5,9 @@ import net.java21.data2flow.contracts.authz.PermissionLookup;
 import net.java21.data2flow.contracts.authz.SpaceScope;
 import net.java21.data2flow.contracts.message.CanonicalTelemetry;
 import net.java21.data2flow.contracts.message.DomainEvent;
+import net.java21.data2flow.contracts.message.event.CommandStatusChanged;
 import net.java21.data2flow.contracts.message.event.DeviceChanged;
+import net.java21.data2flow.contracts.message.event.DeviceStateChanged;
 import net.java21.data2flow.contracts.message.event.DeviceConnectivityChanged;
 import net.java21.data2flow.contracts.message.event.DevicePendingCreated;
 import net.java21.data2flow.contracts.message.event.SourceConnectionChanged;
@@ -212,7 +214,55 @@ public class LiveHub implements SmartLifecycle {
             case SpaceChanged p -> refreshSubscriptions(targets);
             case DevicePendingCreated p -> log.trace("승인 대기 기기 {}: 홈 다시 계산", p.deviceId());
             case SourceConnectionChanged p -> sourceState(targets, p);
+            case CommandStatusChanged p -> commandStatus(org, targets, p);
+            case DeviceStateChanged p -> actuatorState(org, targets, p);
             default -> log.trace("실시간 화면이 쓰지 않는 이벤트 {}", event.type());
+        }
+    }
+
+    /** {@code commands:{deviceId}} 토픽에 명령 상태를 보낸다(ACT-04.02, 같은 조직·구독한 기기만). 출처 표시 이름을 붙인다 */
+    private void commandStatus(long org, Collection<LiveConnection> targets, CommandStatusChanged p) {
+        if (targets.stream().noneMatch(c -> c.isOpen() && c.subscription().commandDevices().contains(p.deviceId()))) {
+            return;
+        }
+        Map<String, Object> source = new LinkedHashMap<>();
+        if (p.source() != null) {
+            Map<String, Object> raw = json.convertValue(p.source(), new tools.jackson.core.type.TypeReference<Map<String, Object>>() { });
+            raw.forEach((k, v) -> {
+                if (v != null) {
+                    source.put(k, v);
+                }
+            });
+            repository.findSourceNames(org, p.source().flowId(), p.source().userId()).forEach(source::put);
+        }
+        String body = write(new LiveDtos.CommandStatus(p.commandId() == null ? null : p.commandId().toString(),
+                Long.toString(p.deviceId()), p.capability(), p.command(), p.status() == null ? null : p.status().name(), p.reason(),
+                p.message(), source.isEmpty() ? null : source, p.at() == null ? clock.instant() : p.at()));
+        for (LiveConnection c : targets) {
+            if (c.isOpen() && c.subscription().commandDevices().contains(p.deviceId())) {
+                c.send("command-status", body);
+            }
+        }
+    }
+
+    /** 액추에이터 보고 상태(EVT-ACT-02)를 그 기기 공간을 보는 {@code space:{id}} 토픽에 {@code device-update}로 보낸다 */
+    private void actuatorState(long org, Collection<LiveConnection> targets, DeviceStateChanged p) {
+        Long spaceId = p.spaceId();
+        if (spaceId == null) {
+            spaceId = repository.findDevice(org, p.deviceId()).map(DeviceRef::spaceId).orElse(null);
+        }
+        if (spaceId == null) {
+            return;
+        }
+        String body = write(new LiveDtos.ActuatorUpdate(Long.toString(p.deviceId()),
+                p.connectivity() == null ? null : p.connectivity().name(),
+                new LiveDtos.ActuatorState(p.reported(), p.delta(), p.reportedVersion(), p.origin() == null ? null : p.origin().name(),
+                        p.at() == null ? clock.instant() : p.at())));
+        for (LiveConnection c : targets) {
+            Subscription s = c.subscription();
+            if (c.isOpen() && s.grant().spaceScope().includes(spaceId) && !s.spaceTopicsFor(spaceId).isEmpty()) {
+                c.send("device-update", body);
+            }
         }
     }
 

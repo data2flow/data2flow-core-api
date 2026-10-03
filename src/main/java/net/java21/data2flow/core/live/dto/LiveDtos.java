@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 /** 실시간 스트림 이벤트 본문(API-DSH-20·21). 이벤트 이름은 각 레코드 설명에 있다. ID는 문자열, 시각은 UTC */
 public final class LiveDtos {
@@ -26,6 +27,29 @@ public final class LiveDtos {
     /** {@code device-update}(space:{id}) — 측정값이 들어오면 metrics, 연결 상태가 바뀌면 connection, 기기 상태가 바뀌면 state */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record DeviceUpdate(String deviceId, List<MetricUpdate> metrics, String connection, String state) {
+    }
+
+    /**
+     * {@code device-update}(space:{id}) — 액추에이터 보고 상태가 바뀐 경우(EVT-ACT-02 {@code device.state.changed}, DSH-api API-DSH-20).
+     * 상태만 바뀐 이벤트라 {@code metrics} 없이 {@code state}만 싣는다
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record ActuatorUpdate(String deviceId, String connection, ActuatorState state) {
+    }
+
+    /** {@code device-update.state}: {reported, delta, reportedVersion, origin(COMMAND·DEVICE_LOCAL·RECONNECT), at} */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record ActuatorState(Map<String, Map<String, Object>> reported, Map<String, Map<String, Object>> delta, long reportedVersion,
+                                String origin, Instant at) {
+    }
+
+    /**
+     * {@code command-status}(commands:{deviceId}) — 명령 상태 변경(EVT-ACT-01, DSH-api API-DSH-20): reason은 상태 사유(예: TIMEOUT_ACK),
+     * message는 차단 사유 문구. source에 core가 flowName·userName을 붙인다(ADR-043)
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record CommandStatus(String commandId, String deviceId, String capability, String command, String status, String reason,
+                                String message, Map<String, Object> source, Instant at) {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)

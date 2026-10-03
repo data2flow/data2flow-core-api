@@ -28,7 +28,7 @@ class LiveTopicTest {
                 new LiveTopic.IngestMessages("ingest-messages?sourceId=3&deviceId=&result=script_error", 3L, null, "SCRIPT_ERROR"),
                 new LiveTopic.Future("notifications"),
                 new LiveTopic.Future("alarms"),
-                new LiveTopic.Future("commands:5"),
+                new LiveTopic.Commands("commands:5", 5),
                 new LiveTopic.Future("analytics:run:9"));
         assertThat(LiveTopic.parse("sources").valid()).containsExactly(new LiveTopic.Sources("sources"));
         assertThat(LiveTopic.parse("ingest-messages").valid()).containsExactly(new LiveTopic.IngestMessages("ingest-messages", null, null, null));

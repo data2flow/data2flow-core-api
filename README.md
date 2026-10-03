@@ -55,6 +55,23 @@ Flyway `V202610050900`~`V202610050970`(추가만, ADR-030). 시계열·원본·�
 - 실시간: `GET /core/stream/live?topics=…`(API-DSH-20·21), `GET /core/stream/sources/{source-id}/live`(API-DSC-10). 15초 ping, 세션 폐기 시 `session-revoked`.
 - 로컬 프로필은 `core.events` 소비·카탈로그 시드를 끕니다(공용 vhost·DB).
 
+## M3 가상 폐루프 (FLW·ACT·SIM·DEV-03.03·TSD-01.03)
+
+플로우 정의·초안·검증·버전·적용(제어 노드 배포 권한·승인)·롤백·템플릿(`hot-then-cool`·`co2-then-ventilate`), 기능 카탈로그·드라이버·모델 연결·조직 제어 설정,
+수동 제어 중계(action), 가상 환경 중계(simulator)와 가상 공간·기기 기준 정보, 실행 실시간 스트림을 맡습니다. Flyway `V202610061000`(추가만).
+
+| 환경변수 | 용도 |
+|---|---|
+| `DATA2FLOW_ACTION_BASE_URL`(기본 `http://data2flow-action`) | 제어 창구 내부 API(명령·조회·취소·섀도·수동 우선·드라이버 연결 확인) |
+| `DATA2FLOW_FLOW_ENGINE_BASE_URL`(기본 `http://data2flow-flow-engine`) | 엔진 검증(API-FLW-84)·노드 카탈로그(83)·적용 상태(82)·지표. 응답이 없으면 core 기본 카탈로그·검증·이벤트 사본을 쓴다 |
+| `DATA2FLOW_SIMULATOR_BASE_URL`(기본 `http://data2flow-simulator`) | 가상 환경 내부 API(API-SIM-30~34) |
+| `DATA2FLOW_SIM_SEED_ON_STARTUP`(기본 true, local false) | 시작할 때 조직마다 SIM 소스·하트비트 기기(`__heartbeat__`)·가상 드라이버 보장(멱등) |
+
+- core가 주는 내부 API: action용 API-ACT-40(`/internal/core/devices/{id}/control-profile`)·41(`/internal/core/sim/sandbox-spaces`)·42(`/internal/core/capabilities`)·43(`/internal/core/control-settings`),
+  flow-engine용 API-FLW-80(`/internal/core/flows/runtime?sinceVersion=`)·81(`/internal/core/flows/{id}/runtime`), simulator용 API-SIM-35(`/internal/core/sim/context`)·36(`/internal/core/sim/data/purge`).
+- 실시간: `/core/stream/live` 토픽 `commands:{deviceId}`(`command-status`), `space:{id}`의 `device-update.state`, 실행 스트림 `/core/stream/sim/runs/{run-id}`(`sim.tick`·`sim.event`·`sim.status`·`sim.throttle`, 1초 틱은 core가 simulator를 읽어 만든다).
+- 메시지: 플로우 적용·상태 → `ConfigChangedMessage(FLOW, flowId)`, 제어 설정 → `SETTING(control)`, 모델 드라이버 연결 → `MODEL`, 샌드박스 → `SIM_SANDBOX`. `core.events`로 EVT-FLW-02·03을 받는다.
+
 ## 작업 규칙
 
 스펙 ID에서 시작하고(인수 테스트 → 테스트 케이스 → 구현), 브랜치·PR·테스트 이름에 스펙 ID를 남깁니다. 1.0 전에는 `main` + `feat/<스펙ID>-<요약>`, 1.0 뒤에는 버전 브랜치 `feature/vX.Y`를 씁니다(ADR-039).

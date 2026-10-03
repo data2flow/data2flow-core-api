@@ -40,7 +40,8 @@ public final class SpaceDtos {
                                       String address, BigDecimal latitude, BigDecimal longitude, Integer kmaNx, Integer kmaNy,
                                       String status, int version, Instant updatedAt, List<SpaceRef> ancestors,
                                       String effectiveTimezone, long childCount, long deviceCount, boolean hasFloorplan,
-                                      TargetsResponse targets, ScheduleResponse schedule, ModeResponse mode) {
+                                      TargetsResponse targets, ScheduleResponse schedule, ModeResponse mode, boolean virtual,
+                                      boolean sandbox) {
     }
 
     /** 공간 참조 */
@@ -51,7 +52,7 @@ public final class SpaceDtos {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record SpaceNode(String id, String parentId, String type, String name, String code, Integer depth, Integer sortOrder,
                             Boolean accessible, Counts counts, String mode, List<EffectiveTarget> targets,
-                            List<SpaceNode> children) {
+                            List<SpaceNode> children, Boolean virtual, Boolean sandbox) {
     }
 
     /** 트리 노드 개수(하위 포함). alarms는 알람 기능(RUL, M4) 전까지 0 */

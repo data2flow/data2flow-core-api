@@ -125,4 +125,20 @@ public class LiveRepository {
     public record RawRow(long id, long sourceId, Long deviceId, String topic, String externalId, byte[] payload, String encoding,
                          String status, String errorCode, Instant receivedAt, String trace) {
     }
+
+    /** 명령 출처 표시 이름(flowName·userName, ADR-043). 없으면 빈 맵 */
+    public java.util.Map<String, Object> findSourceNames(long organizationId, String flowId, Long userId) {
+        java.util.Map<String, Object> names = new java.util.LinkedHashMap<>();
+        if (flowId != null && flowId.matches("[0-9a-fA-F-]{36}")) {
+            jdbc.sql("SELECT name FROM data2flow_core.flows WHERE organization_id = :org AND id = CAST(:id AS uuid)")
+                    .param("org", organizationId).param("id", flowId).query(String.class).optional()
+                    .ifPresent(n -> names.put("flowName", n));
+        }
+        if (userId != null) {
+            jdbc.sql("SELECT name FROM data2flow_core.app_users WHERE organization_id = :org AND id = :id")
+                    .param("org", organizationId).param("id", userId).query(String.class).optional()
+                    .ifPresent(n -> names.put("userName", n));
+        }
+        return names;
+    }
 }

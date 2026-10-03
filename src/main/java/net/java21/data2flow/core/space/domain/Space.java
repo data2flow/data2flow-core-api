@@ -12,7 +12,7 @@ public record Space(long id, long organizationId, Long parentId, SpaceType type,
                     int depth, int sortOrder, String usage, BigDecimal areaM2, Integer capacity, String timezone,
                     String address, BigDecimal latitude, BigDecimal longitude, Integer kmaNx, Integer kmaNy,
                     String modeOverride, Instant modeOverrideUntil, boolean scheduleInherit, String status, int version,
-                    Instant createdAt, Instant updatedAt) {
+                    Instant createdAt, Instant updatedAt, boolean virtual, boolean sandbox) {
 
     /** 자기 자신을 포함한 조상 ID(루트부터) */
     public List<Long> pathIds() {

@@ -26,7 +26,7 @@ public class SpaceRepository {
     static final String COLUMNS = """
             s.id, s.organization_id, s.parent_id, s.type, s.name, s.code, s.path, s.depth, s.sort_order, s.usage, s.area_m2,
             s.capacity, s.timezone, s.address, s.latitude, s.longitude, s.kma_nx, s.kma_ny, s.mode_override, s.mode_override_until,
-            s.schedule_inherit, s.status, s.version, s.created_at, s.updated_at""";
+            s.schedule_inherit, s.status, s.version, s.created_at, s.updated_at, s.is_virtual, s.sandbox""";
 
     static final RowMapper<Space> MAPPER = (rs, n) -> new Space(rs.getLong("id"), rs.getLong("organization_id"),
             Pg.longOrNull(rs, "parent_id"), SpaceType.valueOf(rs.getString("type")), rs.getString("name"), rs.getString("code"),
@@ -34,7 +34,8 @@ public class SpaceRepository {
             intOrNull(rs.getObject("capacity")), rs.getString("timezone"), rs.getString("address"), rs.getBigDecimal("latitude"),
             rs.getBigDecimal("longitude"), intOrNull(rs.getObject("kma_nx")), intOrNull(rs.getObject("kma_ny")),
             rs.getString("mode_override"), Pg.instant(rs, "mode_override_until"), rs.getBoolean("schedule_inherit"),
-            rs.getString("status"), rs.getInt("version"), Pg.instant(rs, "created_at"), Pg.instant(rs, "updated_at"));
+            rs.getString("status"), rs.getInt("version"), Pg.instant(rs, "created_at"), Pg.instant(rs, "updated_at"),
+            rs.getBoolean("is_virtual"), rs.getBoolean("sandbox"));
 
     private final JdbcClient jdbc;
 
@@ -120,6 +121,30 @@ public class SpaceRepository {
         jdbc.sql("UPDATE data2flow_core.spaces SET path = :path WHERE id = :id AND organization_id = :org")
                 .param("path", s.parentPath() + id + "/").param("id", id).param("org", s.organizationId()).update();
         return id;
+    }
+
+    /** 가상 공간 표시(SIM-01.01). 가상 공간은 core가 만들고 물리 설정은 simulator가 둔다 */
+    public void markVirtual(long organizationId, long id) {
+        jdbc.sql("UPDATE data2flow_core.spaces SET is_virtual = true WHERE organization_id = :org AND id = :id")
+                .param("org", organizationId).param("id", id).update();
+    }
+
+    /** 샌드박스 지정·해제(SIM-07.03, API-SIM-24) */
+    public void updateSandbox(long organizationId, long id, boolean sandbox, Long userId, Instant now) {
+        jdbc.sql("""
+                        UPDATE data2flow_core.spaces SET sandbox = :sandbox, version = version + 1, updated_by = :user, updated_at = :now
+                         WHERE organization_id = :org AND id = :id""")
+                .param("sandbox", sandbox).param("user", userId).param("now", Pg.ts(now)).param("org", organizationId).param("id", id)
+                .update();
+    }
+
+    /** 공간(하위 포함)에 실제(virtual=false) 기기가 있는가 */
+    public boolean existsRealDeviceUnder(long organizationId, String path) {
+        return jdbc.sql("""
+                        SELECT EXISTS (SELECT 1 FROM data2flow_core.devices d JOIN data2flow_core.spaces s ON s.id = d.space_id
+                                        WHERE d.organization_id = :org AND s.organization_id = :org AND d.status <> 'DELETED'
+                                          AND NOT d.is_virtual AND s.path LIKE :pattern)""")
+                .param("org", organizationId).param("pattern", likePrefix(path)).query(Boolean.class).single();
     }
 
     /** 속성 수정(API-DEV-03). baseVersion이 다르면 0 */

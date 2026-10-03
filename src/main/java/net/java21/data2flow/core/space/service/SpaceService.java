@@ -90,6 +90,15 @@ public class SpaceService {
      */
     @Transactional(readOnly = true)
     public List<SpaceNode> tree(String rootId, Integer depth, String include) {
+        return tree(rootId, depth, include, null);
+    }
+
+    /**
+     * 공간 트리 + 가상 필터(SIM-01.01, API-SIM-10 "공간 목록 virtual 필터·배지"): {@code virtual=false}면 가상 공간을 빼고,
+     * {@code true}면 가상 공간과 그 조상만 보인다. 노드마다 {@code virtual}·{@code sandbox}를 준다.
+     */
+    @Transactional(readOnly = true)
+    public List<SpaceNode> tree(String rootId, Integer depth, String include, Boolean virtual) {
         roleChecker.require(Permission.DEV_READ);
         CurrentUser user = support.user();
         long org = user.organizationId();
@@ -100,7 +109,7 @@ public class SpaceService {
         Set<String> includes = include == null ? Set.of() : Arrays.stream(include.split(","))
                 .map(s -> s.strip().toLowerCase(Locale.ROOT)).filter(s -> !s.isEmpty()).collect(Collectors.toSet());
 
-        List<Space> all = spaces.listActive(org);
+        List<Space> all = filterVirtual(spaces.listActive(org), virtual);
         SpaceScope scope = roleChecker.spaceScope();
         Map<Long, Space> byId = new LinkedHashMap<>();
         all.forEach(s -> byId.put(s.id(), s));
@@ -135,6 +144,22 @@ public class SpaceService {
         return roots.stream().map(s -> node(s, 1, ctx)).toList();
     }
 
+    static List<Space> filterVirtual(List<Space> all, Boolean virtual) {
+        if (virtual == null) {
+            return all;
+        }
+        if (!virtual) {
+            return all.stream().filter(s -> !s.virtual()).toList();
+        }
+        Set<Long> keep = new HashSet<>();
+        for (Space s : all) {
+            if (s.virtual()) {
+                keep.addAll(s.pathIds());
+            }
+        }
+        return all.stream().filter(s -> keep.contains(s.id())).toList();
+    }
+
     private record TreeContext(Map<Long, Space> byId, Map<Long, List<Space>> children, Set<Long> accessible, Integer depth,
                                Set<String> includes, Map<Long, DeviceCount> deviceCounts, List<TargetRow> targets,
                                List<SlotRow> slots, Instant now) {
@@ -146,7 +171,7 @@ public class SpaceService {
                 : ctx.children().getOrDefault(s.id(), List.of()).stream().map(c -> node(c, level + 1, ctx)).toList();
         if (!ok) {
             return new SpaceNode(Long.toString(s.id()), SpaceSupport.id(s.parentId()), s.type().name(), s.name(), null, s.depth(),
-                    s.sortOrder(), false, null, null, null, kids);
+                    s.sortOrder(), false, null, null, null, kids, s.virtual() ? Boolean.TRUE : null, null);
         }
         Counts counts = ctx.includes().contains("counts") ? counts(s, ctx) : null;
         String mode = null;
@@ -162,7 +187,7 @@ public class SpaceService {
             }
         }
         return new SpaceNode(Long.toString(s.id()), SpaceSupport.id(s.parentId()), s.type().name(), s.name(), s.code(), s.depth(),
-                s.sortOrder(), true, counts, mode, targets, kids);
+                s.sortOrder(), true, counts, mode, targets, kids, s.virtual(), s.sandbox() ? Boolean.TRUE : null);
     }
 
     /** 하위(자기 포함, 범위 안만) 기기 수 */
@@ -196,7 +221,7 @@ public class SpaceService {
                 r.status(), r.version(), r.updatedAt(), ancestors, SpaceSupport.zone(chain).getId(),
                 spaces.countChildren(org, s.id()), spaces.countDevicesUnder(org, s.path()),
                 floorplans.findBySpace(org, s.id()).isPresent(), targets, SpaceInheritance.scheduleResponse(chain, schedule),
-                SpaceInheritance.modeResponse(SpaceInheritance.mode(chain, schedule.slots(), clock.instant())));
+                SpaceInheritance.modeResponse(SpaceInheritance.mode(chain, schedule.slots(), clock.instant())), s.virtual(), s.sandbox());
     }
 
     /** API-DEV-02 공간 만들기 */
@@ -213,6 +238,10 @@ public class SpaceService {
             if (!roleChecker.spaceScope().unrestricted()) {
                 throw new BusinessException(CommonErrorCode.PERMISSION_DENIED);
             }
+        }
+        if (parent != null && parent.virtual()) {
+            // 가상 공간 아래에는 실제 공간을 둘 수 없다(TC-SIM-001). 가상 공간은 가상 환경 API(API-SIM-10)로 만든다
+            throw SpaceSupport.invalid("parentId", "VIRTUAL_PARENT");
         }
         SpaceType type = SpaceType.parse(req.type()).orElseThrow(() -> SpaceSupport.invalid("type", "INVALID"));
         if (!type.allowedUnder(parent == null ? null : parent.type())) {
