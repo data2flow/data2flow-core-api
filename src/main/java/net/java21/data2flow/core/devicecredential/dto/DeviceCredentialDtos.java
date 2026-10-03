@@ -22,4 +22,21 @@ public final class DeviceCredentialDtos {
     public record CredentialResponse(String id, String deviceId, String type, String username, String status, Instant expiresAt,
                                      Instant lastUsedAt, Instant createdAt, Instant revokedAt) {
     }
+
+    /** API-DSC-72 항목(내부 전용, 로그 금지). ID는 문자열 */
+    public record SigningKey(String credentialId, String organizationId, String sourceId, String deviceId, String deviceKey,
+                             String signingKey, Instant expiresAt) {
+        @Override
+        public String toString() {
+            return "SigningKey[credentialId=" + credentialId + ", deviceKey=" + deviceKey + "]";
+        }
+    }
+
+    /** API-DSC-72 응답 {@code {version, keys[]}} */
+    public record SigningKeysResponse(long version, java.util.List<SigningKey> keys) {
+        @Override
+        public String toString() {
+            return "SigningKeysResponse[version=" + version + ", keys=" + keys.size() + "]";
+        }
+    }
 }

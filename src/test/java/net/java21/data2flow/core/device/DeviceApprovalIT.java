@@ -19,6 +19,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** DEV-02.03 승인 대기 승인·거부·모델 추천, DSC-03.05 승인 시 서명 키(ADR-031) */
 class DeviceApprovalIT extends IntegrationTestSupport {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    net.java21.data2flow.contracts.secret.SecretCipher cipher;
+
+
     private DeviceTestData d;
     private long org;
     private long admin;
@@ -167,7 +171,7 @@ class DeviceApprovalIT extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("[DSC-03.05][AT-DSC-07.5] 플랫폼 브로커 기기 승인: 서명 키를 응답에 한 번만, DB에는 SHA-256 해시만, 다시 조회해도 없음 — TC-DSC-323")
+    @DisplayName("[DSC-03.05][AT-DSC-07.5] 플랫폼 브로커 기기 승인: 서명 키를 응답에 한 번만, DB에는 평문 없이 해시와 SecretCipher 암호문만(ADR-042), 외부 API로 다시 조회해도 없음, ingress 내부 API(API-DSC-72)로만 받음 — TC-DSC-323")
     void platformBrokerSigningKey() throws Exception {
         long broker = d.source(org, "pb", "PLATFORM_BROKER", "AUTO_REGISTER", null, null, 100);
         long a = data.device(org, broker, "esp-02", "PENDING", null, null);
@@ -179,6 +183,14 @@ class DeviceApprovalIT extends IntegrationTestSupport {
         String hash = jdbc.sql("SELECT signing_key_hash FROM data2flow_core.device_credentials WHERE device_id = :d").param("d", a)
                 .query(String.class).single();
         assertThat(hash).isEqualTo(Tokens.sha256Hex(key)).doesNotContain(key);
+        byte[] enc = jdbc.sql("SELECT signing_key_enc FROM data2flow_core.device_credentials WHERE device_id = :d").param("d", a)
+                .query(byte[].class).single();
+        assertThat(new String(enc, java.nio.charset.StandardCharsets.ISO_8859_1)).doesNotContain(key);
+        assertThat(cipher.decrypt(enc, "data2flow_core.device_credentials.signing_key:" + org + ":" + a).reveal()).isEqualTo(key);
+        String internal = mvc.perform(get("/internal/core/device-credentials/signing-keys").header("X-CALLER-SERVICE", "data2flow-ingress"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(JsonPath.<List<String>>read(internal, "$.response.keys[?(@.deviceId == '" + a + "')].signingKey")).containsExactly(key);
+        assertThat(JsonPath.<List<String>>read(internal, "$.response.keys[?(@.deviceId == '" + a + "')].deviceKey")).containsExactly("esp-02");
         mvc.perform(as(org, admin, get("/core/devices/" + a + "/credentials")))
                 .andExpect(jsonPath("$.response[0].username").value("esp-02"))
                 .andExpect(jsonPath("$.response[0].status").value("ACTIVE"))

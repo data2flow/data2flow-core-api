@@ -99,4 +99,53 @@ class DeviceCredentialIT extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.response.username").value("esp-02-" + twin));
         assertThat(List.of(device, twin)).hasSize(2);
     }
+
+    @Test
+    @DisplayName("[DSC-03.02][DSC-03.03] API-DSC-72 서명 키 내부 API: ACTIVE·만료 전·PLATFORM_BROKER만, 폐기·만료·삭제 기기는 빠짐, deviceKey는 소스 패턴 적용 소문자, ID는 문자열 — TC-DSC-107·114")
+    void internalSigningKeys() throws Exception {
+        String issued = mvc.perform(as(org, admin, post("/core/devices/" + device + "/credentials")))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String key = JsonPath.read(issued, "$.response.signingKey");
+        String credentialId = JsonPath.read(issued, "$.response.credentialId");
+        String body = signingKeys();
+        assertThat(JsonPath.<List<String>>read(body, "$.response.keys[?(@.deviceId == '" + device + "')].signingKey")).containsExactly(key);
+        assertThat(JsonPath.<List<String>>read(body, "$.response.keys[?(@.deviceId == '" + device + "')].credentialId"))
+                .containsExactly(credentialId);
+        assertThat(JsonPath.<List<String>>read(body, "$.response.keys[?(@.deviceId == '" + device + "')].organizationId"))
+                .containsExactly(Long.toString(org));
+        assertThat(JsonPath.<List<Object>>read(body, "$.response.keys[?(@.deviceId == '" + device + "')].sourceId").getFirst())
+                .isInstanceOf(String.class);
+        Number v1 = JsonPath.read(body, "$.response.version");
+
+        // 소스 패턴: deviceKeyPattern "ESP-{externalId}" → 소문자 "esp-up-1"
+        long broker3 = new DeviceTestData(jdbc).source(org, "pb3", "PLATFORM_BROKER", "AUTO_REGISTER", null, null, 100);
+        jdbc.sql("UPDATE data2flow_core.data_sources SET connection = CAST(:c AS jsonb) WHERE id = :id")
+                .param("c", "{\"deviceKeyPattern\":\"ESP-{externalId}\"}").param("id", broker3).update();
+        long patterned = data.device(org, broker3, "UP-1", "ACTIVE", null, null);
+        mvc.perform(as(org, admin, post("/core/devices/" + patterned + "/credentials"))).andExpect(status().isCreated());
+        body = signingKeys();
+        assertThat(JsonPath.<List<String>>read(body, "$.response.keys[?(@.deviceId == '" + patterned + "')].deviceKey"))
+                .containsExactly("esp-up-1");
+        assertThat(((Number) JsonPath.read(body, "$.response.version")).longValue()).isGreaterThan(v1.longValue());
+
+        // 만료·삭제 기기·폐기는 빠진다
+        jdbc.sql("UPDATE data2flow_core.device_credentials SET expires_at = :t WHERE device_id = :d")
+                .param("t", java.sql.Timestamp.from(clock.instant().minusSeconds(1))).param("d", patterned).update();
+        jdbc.sql("UPDATE data2flow_core.devices SET status = 'DELETED' WHERE id = :d").param("d", device).update();
+        assertThat(JsonPath.<List<Object>>read(signingKeys(), "$.response.keys[?(@.organizationId == '" + org + "')]")).isEmpty();
+        jdbc.sql("UPDATE data2flow_core.devices SET status = 'ACTIVE' WHERE id = :d").param("d", device).update();
+        assertThat(JsonPath.<List<Object>>read(signingKeys(), "$.response.keys[?(@.organizationId == '" + org + "')]")).hasSize(1);
+        mvc.perform(as(org, admin, post("/core/devices/" + device + "/credentials/" + credentialId + "/revoke"))).andExpect(status().isOk());
+        assertThat(JsonPath.<List<Object>>read(signingKeys(), "$.response.keys[?(@.organizationId == '" + org + "')]")).isEmpty();
+        // 암호문이 망가진 행은 빼고 나머지는 준다(키 값은 로그에 없음)
+        mvc.perform(as(org, admin, post("/core/devices/" + device + "/credentials"))).andExpect(status().isCreated());
+        jdbc.sql("UPDATE data2flow_core.device_credentials SET signing_key_enc = :e WHERE device_id = :d AND status = 'ACTIVE'")
+                .param("e", new byte[] {1, 2, 3, 4}).param("d", device).update();
+        assertThat(JsonPath.<List<Object>>read(signingKeys(), "$.response.keys[?(@.organizationId == '" + org + "')]")).isEmpty();
+    }
+
+    private String signingKeys() throws Exception {
+        return mvc.perform(get("/internal/core/device-credentials/signing-keys").header("X-CALLER-SERVICE", "data2flow-ingress"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+    }
 }
