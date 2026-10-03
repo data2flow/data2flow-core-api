@@ -52,6 +52,20 @@ class SignupIT extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("[IAM-01.08][AT-IAM-16.1] 공개 가입 설정(API-IAM-74)은 토큰 없이 조직 정책의 허용 여부를 알려 준다 — TC-IAM-061")
+    void publicSignupSettings() throws Exception {
+        mvc.perform(get("/core/public/signup-settings")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.header.isSuccessful").value(true))
+                .andExpect(jsonPath("$.response.signupRequestEnabled").value(false));
+        setUp(false);
+        mvc.perform(get("/core/public/signup-settings")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.response.signupRequestEnabled").value(false));
+        fx.policy(org, "signup_request_enabled", true);
+        mvc.perform(get("/core/public/signup-settings")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.response.signupRequestEnabled").value(true));
+    }
+
+    @Test
     @DisplayName("[IAM-01.08][AT-IAM-16.1] 설정이 꺼져 있으면 404 SIGNUP_DISABLED — TC-IAM-061")
     void disabled() throws Exception {
         setUp(false);

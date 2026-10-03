@@ -1,5 +1,6 @@
 package net.java21.data2flow.core.session.controller;
 
+import net.java21.data2flow.contracts.identity.DataflowHeaders;
 import net.java21.data2flow.contracts.web.ApiResponse;
 import net.java21.data2flow.core.session.dto.SessionDtos.RevokeAllResponse;
 import net.java21.data2flow.core.session.dto.SessionDtos.SessionResponse;
@@ -19,7 +20,7 @@ import java.util.List;
 public class SessionController {
 
     /** BFF가 현재 세션 표시를 위해 넣는 헤더(세션 쿠키 안의 sid). 문서에 없는 확장 — 보고서 참조 */
-    public static final String SESSION_ID_HEADER = "X-SESSION-ID";
+    public static final String SESSION_ID_HEADER = DataflowHeaders.SESSION_ID;
 
     private final SessionService service;
 

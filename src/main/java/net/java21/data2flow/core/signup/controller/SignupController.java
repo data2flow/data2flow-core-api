@@ -10,6 +10,7 @@ import net.java21.data2flow.core.signup.dto.SignupDtos.ApproveSignupRequest;
 import net.java21.data2flow.core.signup.dto.SignupDtos.CreateSignupRequest;
 import net.java21.data2flow.core.signup.dto.SignupDtos.RejectSignupRequest;
 import net.java21.data2flow.core.signup.dto.SignupDtos.SignupDecisionResponse;
+import net.java21.data2flow.core.signup.dto.SignupDtos.SignupSettingsResponse;
 import net.java21.data2flow.core.signup.dto.SignupDtos.SignupSummaryResponse;
 import net.java21.data2flow.core.signup.service.SignupService;
 import org.springframework.http.HttpStatus;
@@ -29,6 +30,12 @@ public class SignupController {
 
     public SignupController(SignupService service) {
         this.service = service;
+    }
+
+    /** API-IAM-74 공개 가입 설정(IAM-01.08) — 공개, 200. 로그인 화면의 "가입 신청" 링크 표시 여부 */
+    @GetMapping("/core/public/signup-settings")
+    public ApiResponse<SignupSettingsResponse> publicSettings() {
+        return ApiResponse.success(service.publicSettings());
     }
 
     /** API-IAM-67 가입 신청(IAM-01.08) — 공개(설정 켜짐), 202 */

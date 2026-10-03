@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 
-/** 가입 신청 DTO(API-IAM-67·68·69) */
+/** 가입 신청 DTO(API-IAM-67·68·69·74) */
 public final class SignupDtos {
 
     private SignupDtos() {
@@ -31,6 +31,10 @@ public final class SignupDtos {
     }
 
     public record AcceptedResponse(String status) {
+    }
+
+    /** API-IAM-74 로그인 전 화면이 읽는 공개 가입 설정. 조직을 특정할 수 없으면 false */
+    public record SignupSettingsResponse(boolean signupRequestEnabled) {
     }
 
     @JsonInclude(JsonInclude.Include.ALWAYS)

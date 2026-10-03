@@ -35,6 +35,7 @@ import net.java21.data2flow.core.signup.dto.SignupDtos.ApproveSignupRequest;
 import net.java21.data2flow.core.signup.dto.SignupDtos.CreateSignupRequest;
 import net.java21.data2flow.core.signup.dto.SignupDtos.SignupDecisionResponse;
 import net.java21.data2flow.core.signup.dto.SignupDtos.SignupSummaryResponse;
+import net.java21.data2flow.core.signup.dto.SignupDtos.SignupSettingsResponse;
 import net.java21.data2flow.core.signup.repository.SignupRequestRepository;
 import net.java21.data2flow.core.signup.repository.SignupRequestRepository.SignupRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -101,6 +102,18 @@ public class SignupService {
         this.audits = audits;
         this.properties = properties;
         this.clock = clock;
+    }
+
+    /**
+     * API-IAM-74 공개 가입 설정. v1은 단일 조직이므로 활성 조직 하나를 찾아 정책의 가입 신청 허용 여부만 알려 준다.
+     * 조직이 없거나 둘 이상이면(특정 불가) 신청도 404 SIGNUP_DISABLED이므로 false로 답한다
+     */
+    @Transactional(readOnly = true)
+    public SignupSettingsResponse publicSettings() {
+        boolean enabled = organizations.findSingleActive()
+                .map(org -> organizations.findPolicy(org.id()).orElse(SecurityPolicy.defaults(org.id())).signupRequestEnabled())
+                .orElse(false);
+        return new SignupSettingsResponse(enabled);
     }
 
     /** API-IAM-67 신청(공개). 성공·이메일 중복 모두 202 */
