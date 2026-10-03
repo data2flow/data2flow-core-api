@@ -377,12 +377,8 @@ class SpaceIT extends IntegrationTestSupport {
         long source = data.source(org, "src-a");
         long model = data.model(org, "AC-1", List.of());
         long sensorModel = data.model(org, "EM-1", List.of());
-        jdbc.sql("""
-                CREATE TABLE IF NOT EXISTS data2flow_core.model_capabilities (
-                    organization_id bigint NOT NULL, model_id bigint NOT NULL, capability varchar(60) NOT NULL,
-                    constraints jsonb, PRIMARY KEY (model_id, capability))""").update();
-        jdbc.sql("INSERT INTO data2flow_core.model_capabilities (organization_id, model_id, capability) VALUES (:org, :m, 'Thermostat'), (:org, :m, 'OnOff')")
-                .param("org", org).param("m", model).update();
+        jdbc.sql("UPDATE data2flow_core.device_models SET capabilities = CAST(:caps AS jsonb) WHERE id = :m")
+                .param("caps", "[{\"capability\":\"Thermostat\"},{\"capability\":\"OnOff\"}]").param("m", model).update();
         long ac = data.device(org, source, "ac-1", "ACTIVE", lab, model);
         jdbc.sql("UPDATE data2flow_core.devices SET kind = 'ACTUATOR' WHERE id = :id").param("id", ac).update();
         long sensor = data.device(org, source, "em-1", "ACTIVE", hall, sensorModel);

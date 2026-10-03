@@ -17,14 +17,14 @@ import java.util.Optional;
  * 조회할 때 기기 종류로 만든다: SENSOR → MEASURES, ACTUATOR → CONTROLS, HYBRID → 둘 다, GATEWAY → 없음(domain-model §2.4).
  * 저장 행은 설치 공간 밖을 추가로 측정·제어하는 관계만이다. 기기 행({@code devices})은 기기 기능 소유이고 여기서는 읽기만 한다.
  *
- * <p>기능(capability)은 ACT 소유 {@code data2flow_core.model_capabilities(model_id, capability)}(domain-model §2.7)에서 읽는다.
+ * <p>기능(capability)은 모델의 {@code device_models.capabilities}(jsonb {@code [{capability, constraints}]}, DEV-03.01)에서 읽는다.
+ * ACT가 M3에서 {@code model_capabilities} 테이블을 만들면 그쪽으로 옮긴다.
  * 그 테이블이 아직 없으면(M2 앞부분) 기능 목록은 비고 기능 조건은 아무것도 맞지 않는다.
  */
 @Repository
 public class DeviceRelationRepository {
 
     private final JdbcClient jdbc;
-    private volatile boolean capabilitiesChecked;
 
     public DeviceRelationRepository(JdbcClient jdbc) {
         this.jdbc = jdbc;
@@ -91,10 +91,6 @@ public class DeviceRelationRepository {
         if (spaceIds == null || spaceIds.isEmpty()) {
             return List.of();
         }
-        boolean caps = capabilitiesAvailable();
-        if (capability != null && !caps) {
-            return List.of();
-        }
         Map<String, Object> params = new HashMap<>();
         params.put("org", organizationId);
         params.put("spaces", Pg.bigintArray(spaceIds));
@@ -104,13 +100,12 @@ public class DeviceRelationRepository {
             params.put("relation", relation);
         }
         if (capability != null) {
-            where.append(" AND EXISTS (SELECT 1 FROM data2flow_core.model_capabilities mc WHERE mc.model_id = d.model_id AND lower(mc.capability) = lower(:capability))");
+            where.append(" AND EXISTS (SELECT 1 FROM data2flow_core.device_models cm, jsonb_array_elements(cm.capabilities) c WHERE cm.id = d.model_id AND lower(c->>'capability') = lower(:capability))");
             params.put("capability", capability);
         }
         where.append(SpaceScopeSql.and(scope, "d.space_id", params));
-        String capabilitiesColumn = caps
-                ? "ARRAY(SELECT DISTINCT mc.capability FROM data2flow_core.model_capabilities mc WHERE mc.model_id = d.model_id ORDER BY 1)"
-                : "CAST('{}' AS text[])";
+        String capabilitiesColumn =
+                "ARRAY(SELECT DISTINCT c->>'capability' FROM data2flow_core.device_models cm, jsonb_array_elements(cm.capabilities) c WHERE cm.id = d.model_id ORDER BY 1)";
         return jdbc.sql("""
                         WITH r AS (
                             SELECT d.id AS device_id, 'MEASURES' AS relation, d.space_id FROM data2flow_core.devices d
@@ -140,19 +135,6 @@ public class DeviceRelationRepository {
                         rs.getString("relation"), rs.getLong("space_id"), Pg.longOrNull(rs, "model_id"), rs.getString("model_name"),
                         Pg.stringList(rs, "capabilities"), rs.getString("connectivity"), Pg.instant(rs, "last_seen_at")))
                 .list();
-    }
-
-    /** 기능 테이블이 있는가(한 번 있으면 기억한다) */
-    boolean capabilitiesAvailable() {
-        if (capabilitiesChecked) {
-            return true;
-        }
-        boolean exists = jdbc.sql("""
-                        SELECT EXISTS (SELECT 1 FROM information_schema.columns
-                                        WHERE table_schema = 'data2flow_core' AND table_name = 'model_capabilities' AND column_name = 'capability')""")
-                .query(Boolean.class).single();
-        capabilitiesChecked = exists;
-        return exists;
     }
 
     /** 기기 요약 */
