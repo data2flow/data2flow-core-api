@@ -13,7 +13,7 @@ import net.java21.data2flow.contracts.message.event.SpaceChanged;
 import net.java21.data2flow.core.config.CoreProperties;
 import net.java21.data2flow.core.dashboard.dto.DashboardDtos.IngestMonitorResponse;
 import net.java21.data2flow.core.dashboard.service.HomeSummaryService;
-import net.java21.data2flow.core.dashboard.service.IngestMonitorService;
+import net.java21.data2flow.core.dashboard.service.IngestFlowService;
 import net.java21.data2flow.core.live.domain.LiveTopic;
 import net.java21.data2flow.core.live.domain.Subscription;
 import net.java21.data2flow.core.live.dto.LiveDtos.DeviceUpdate;
@@ -88,7 +88,7 @@ public class LiveHub implements SmartLifecycle {
     private final LiveSubscriptions subscriptions;
     private final PermissionLookup permissions;
     private final HomeSummaryService home;
-    private final IngestMonitorService ingest;
+    private final IngestFlowService ingest;
     private final JsonMapper json;
     private final Clock clock;
     private final CoreProperties.Live settings;
@@ -97,7 +97,7 @@ public class LiveHub implements SmartLifecycle {
     private volatile boolean running;
 
     public LiveHub(LiveRepository repository, LiveSubscriptions subscriptions, PermissionLookup permissions, HomeSummaryService home,
-                   IngestMonitorService ingest, JsonMapper json, Clock clock, CoreProperties properties) {
+                   IngestFlowService ingest, JsonMapper json, Clock clock, CoreProperties properties) {
         this.repository = repository;
         this.subscriptions = subscriptions;
         this.permissions = permissions;

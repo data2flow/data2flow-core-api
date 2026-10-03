@@ -45,7 +45,7 @@ import java.util.Map;
  * 실패 보관함은 소스 정보가 없어 공간 범위가 제한된 사용자에게는 STORE·PUBLISH 실패를 0으로 보인다(BR-DSH-01: 범위 밖 수치를 보이지 않음).
  */
 @Service
-public class IngestMonitorService {
+public class IngestFlowService {
 
     public static final List<String> STAGES = List.of("SOURCE", "DECODE", "SCRIPT", "VALIDATE", "STORE", "PUBLISH");
     static final int STAGE_WINDOW_MINUTES = 5;
@@ -55,7 +55,7 @@ public class IngestMonitorService {
     private final IngestStatsRepository repository;
     private final Clock clock;
 
-    public IngestMonitorService(RoleChecker roleChecker, IngestStatsRepository repository, Clock clock) {
+    public IngestFlowService(RoleChecker roleChecker, IngestStatsRepository repository, Clock clock) {
         this.roleChecker = roleChecker;
         this.repository = repository;
         this.clock = clock;

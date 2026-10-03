@@ -8,7 +8,7 @@ import net.java21.data2flow.core.dashboard.dto.DashboardDtos.RecentRequest;
 import net.java21.data2flow.core.dashboard.dto.DashboardDtos.RecentResponse;
 import net.java21.data2flow.core.dashboard.dto.DashboardDtos.SpaceOverviewResponse;
 import net.java21.data2flow.core.dashboard.service.HomeSummaryService;
-import net.java21.data2flow.core.dashboard.service.IngestMonitorService;
+import net.java21.data2flow.core.dashboard.service.IngestFlowService;
 import net.java21.data2flow.core.dashboard.service.PreferencesService;
 import net.java21.data2flow.core.dashboard.service.SpaceOverviewService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,10 +26,10 @@ public class DashboardController {
 
     private final HomeSummaryService home;
     private final SpaceOverviewService overview;
-    private final IngestMonitorService ingest;
+    private final IngestFlowService ingest;
     private final PreferencesService preferences;
 
-    public DashboardController(HomeSummaryService home, SpaceOverviewService overview, IngestMonitorService ingest,
+    public DashboardController(HomeSummaryService home, SpaceOverviewService overview, IngestFlowService ingest,
                                PreferencesService preferences) {
         this.home = home;
         this.overview = overview;

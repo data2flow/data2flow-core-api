@@ -21,7 +21,7 @@ class IngestStagesTest {
     @DisplayName("[DSH-03.01][AT-DSH-03.1] 5분 합계 → 단계별 분당 처리·실패, 실패 링크(SCRIPT_ERROR 필터) — TC-DSH-020")
     void stagesFromStats() {
         // 5분: 수신 600, 중복 10, 디코딩 오류 15, 스크립트 오류 60(분당 12), 검증 실패 5 + 미등록 거부 5, 저장 500
-        List<StageSnapshot> stages = IngestMonitorService.stages(new StatSums(600, 500, 15, 60, 5, 5, 10),
+        List<StageSnapshot> stages = IngestFlowService.stages(new StatSums(600, 500, 15, 60, 5, 5, 10),
                 Map.of("STORE", 5L, "PUBLISH", 10L));
         assertThat(stages).extracting(StageSnapshot::key).containsExactly("SOURCE", "DECODE", "SCRIPT", "VALIDATE", "STORE", "PUBLISH");
         assertThat(stages).extracting(StageSnapshot::inPerMin).containsExactly(120.0, 118.0, 115.0, 103.0, 100.0, 99.0);
@@ -32,16 +32,16 @@ class IngestStagesTest {
         assertThat(stages.get(3).failureLink()).isNull();
         assertThat(stages.get(5).failureLink()).isEqualTo("/ingest/failures?stage=PUBLISH");
         assertThat(stages).allSatisfy(s -> assertThat(s.latencyP95Ms()).isNull());
-        assertThat(IngestMonitorService.stages(new StatSums(0, 0, 0, 0, 0, 0, 0), Map.of()))
+        assertThat(IngestFlowService.stages(new StatSums(0, 0, 0, 0, 0, 0, 0), Map.of()))
                 .allSatisfy(s -> assertThat(s.inPerMin()).isZero());
     }
 
     @Test
     @DisplayName("[DSH-03.02] 대표 상태: 운영 중지·초안 DISABLED, 보고 없음 DISCONNECTED, 그 밖은 런타임 상태")
     void sourceState() {
-        assertThat(IngestMonitorService.state(new SourceRow(1, "a", "PAUSED", "CONNECTED"))).isEqualTo("DISABLED");
-        assertThat(IngestMonitorService.state(new SourceRow(1, "a", "ACTIVE", null))).isEqualTo("DISCONNECTED");
-        assertThat(IngestMonitorService.state(new SourceRow(1, "a", "ACTIVE", "ERROR"))).isEqualTo("ERROR");
+        assertThat(IngestFlowService.state(new SourceRow(1, "a", "PAUSED", "CONNECTED"))).isEqualTo("DISABLED");
+        assertThat(IngestFlowService.state(new SourceRow(1, "a", "ACTIVE", null))).isEqualTo("DISCONNECTED");
+        assertThat(IngestFlowService.state(new SourceRow(1, "a", "ACTIVE", "ERROR"))).isEqualTo("ERROR");
     }
 
     @Test
@@ -52,16 +52,16 @@ class IngestStagesTest {
                 new MinuteCount(1, Instant.parse("2026-10-03T12:00:00Z"), 10),
                 new MinuteCount(1, Instant.parse("2026-10-03T12:01:00Z"), 20),
                 new MinuteCount(9, Instant.parse("2026-10-03T12:01:00Z"), 99));
-        List<Throughput> hour = IngestMonitorService.throughput("1h", now, List.of(1L, 2L), counts);
+        List<Throughput> hour = IngestFlowService.throughput("1h", now, List.of(1L, 2L), counts);
         assertThat(hour).hasSize(2);
         assertThat(hour.getFirst().points()).hasSize(60);
         assertThat(hour.getFirst().points().getFirst()).containsExactly("2026-10-03T11:07:00Z", 0.0);
         assertThat(hour.getFirst().points().getLast()).containsExactly("2026-10-03T12:06:00Z", 42.0);
         assertThat(hour.get(1).points()).allSatisfy(p -> assertThat(p.get(1)).isEqualTo(0.0));
-        List<Throughput> day = IngestMonitorService.throughput("24h", now, List.of(1L), counts);
+        List<Throughput> day = IngestFlowService.throughput("24h", now, List.of(1L), counts);
         assertThat(day.getFirst().points()).hasSize(288);
         assertThat(day.getFirst().points().getLast()).containsExactly("2026-10-03T12:00:00Z", 6.0);
-        assertThat(IngestMonitorService.fiveMinuteFloor(now)).isEqualTo(Instant.parse("2026-10-03T12:05:00Z"));
-        assertThat(IngestMonitorService.perMinute(7, 5)).isEqualTo(1.4);
+        assertThat(IngestFlowService.fiveMinuteFloor(now)).isEqualTo(Instant.parse("2026-10-03T12:05:00Z"));
+        assertThat(IngestFlowService.perMinute(7, 5)).isEqualTo(1.4);
     }
 }
