@@ -35,6 +35,26 @@
   (이미 ADMIN이 있으면 아무것도 하지 않음. 초기 비밀번호는 Secret 값이나 생성 파일로만 전달하고 로그에는 남기지 않음)
 - 로컬 프로필은 아웃박스 릴레이와 정리 작업을 끕니다(공용 DB의 운영 아웃박스를 대신 보내지 않도록).
 
+## M2 수집 경로 (DEV·DSC·SCR·TSD·ING·DSH·IAM 공간 권한)
+
+공간 트리·속성·평면도·목표·시간표·시맨틱, 기기 모델(아카데미 실측 6종 시드)·측정 항목·별칭, 기기 발견→승인·그룹·태그·속성·게이트웨이·기기 자격,
+데이터 소스·커넥터 카탈로그·연결 상태·지표·연결 테스트, 스크립트 정의·배포, 시계열·주석 조회, 수집 모니터·실패 보관함, 실시간 화면(SSE)·홈 요약을 맡습니다.
+Flyway `V202610050900`~`V202610050970`(추가만, ADR-030). 시계열·원본·기기 상태는 pipeline 소유 `data2flow_pipeline`을 읽기만 합니다(conventions §6).
+
+| 환경변수 | 용도 |
+|---|---|
+| `DATA2FLOW_ORGANIZATION_CODE` | 이 배포가 맡는 조직 코드(prod `default`, staging `staging`, ADR-030). 공개 경로·로그인·아웃박스 릴레이·조직 전체 내부 조회의 범위. 비우면 ACTIVE 조직이 하나일 때 그 조직 |
+| `DATA2FLOW_INGRESS_BASE_URL`(기본 `http://data2flow-ingress`) | 연결 테스트(API-DSC-51)·원본 샘플 SSE(API-DSC-52) |
+| `DATA2FLOW_PIPELINE_BASE_URL`(기본 `http://data2flow-pipeline`) | 스크립트 검사·테스트 실행(API-SCR-30·31), 재처리·폐기(API-ING-22·23·24), 별칭 재매핑(API-TSD-51) |
+| `DATA2FLOW_RABBITMQ_STREAM_PORT`(기본 5552) | Super Stream `data2flow.telemetry` 실시간 소비(그룹 `core-live`, 최신부터, 오프셋 저장 없음) |
+| `DATA2FLOW_DEVELOPER` | 로컬 소비자 그룹 접미사(`core-live-<이름>`) |
+| `DATA2FLOW_CATALOG_SEED_ON_STARTUP`(기본 true, local false) | 시작할 때 ACTIVE 조직에 기본 모델 6종·측정 항목 시드(멱등) |
+
+- 메시지: 도메인 이벤트는 `DomainEvent` 봉투로 `data2flow.events`, 설정 변경은 `ConfigChangedMessage`로 `data2flow.config`(둘 다 아웃박스).
+  소비는 Quorum 큐 `core.events`(DLQ `core.events.dlq`, 중복 제거 `processed_messages`)와, 화면용 파드별 임시 큐 `core.live.<uuid>`.
+- 실시간: `GET /core/stream/live?topics=…`(API-DSH-20·21), `GET /core/stream/sources/{source-id}/live`(API-DSC-10). 15초 ping, 세션 폐기 시 `session-revoked`.
+- 로컬 프로필은 `core.events` 소비·카탈로그 시드를 끕니다(공용 vhost·DB).
+
 ## 작업 규칙
 
 스펙 ID에서 시작하고(인수 테스트 → 테스트 케이스 → 구현), 브랜치·PR·테스트 이름에 스펙 ID를 남깁니다. 1.0 전에는 `main` + `feat/<스펙ID>-<요약>`, 1.0 뒤에는 버전 브랜치 `feature/vX.Y`를 씁니다(ADR-039).
