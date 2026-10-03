@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
  * <ul>
  *   <li>Single Active Consumer가 아니다: 파드마다 모든 메시지를 받아 그 파드에 붙은 연결로 보낸다</li>
  *   <li>오프셋을 저장하지 않는다({@code noTrackingStrategy}, 시작은 {@code next}). 다시 시작하면 그 뒤 메시지부터(손실 허용 — 화면은 최신값만 필요)</li>
- *   <li>RabbitMQ가 없거나 스트림이 아직 없어도 서비스는 뜬다. 뒤에서 {@code stream-retry}(30초)마다 다시 붙는다.
+ *   <li>RabbitMQ가 없거나 스트림이 아직 없어도 서비스는 뜬다. 뒤에서 {@code stream-retry}(10초)마다 다시 붙는다. 스트림(파티션 0)이 생기기 전에는 붙지 않는다(빈 소비자 방지).
  *       붙은 뒤의 끊김은 클라이언트가 스스로 복구한다</li>
  *   <li>주소: {@code spring.rabbitmq.stream.*}. 브로커가 알려 주는 노드 주소 대신 설정한 주소로만 붙는다(s4 단일 노드, 내부망 5552)</li>
  *   <li>{@code data2flow.core.live.telemetry-enabled=false}면 아무것도 하지 않는다(테스트 기본)</li>
@@ -96,6 +96,10 @@ public class TelemetryStreamConsumer implements SmartLifecycle {
                         .addressResolver(address -> new Address(host, port))
                         .build();
                 environment = env;
+            }
+            if (!env.streamExists(MessagingNames.STREAM_TELEMETRY + "-0")) {
+                // pipeline이 첫 발행 때 Super Stream을 만든다. 파티션이 없을 때 붙으면 빈 소비자가 되어 다시 붙지 않으므로 기다린다
+                throw new IllegalStateException("Super Stream " + MessagingNames.STREAM_TELEMETRY + "이(가) 아직 없습니다");
             }
             consumer = env.consumerBuilder()
                     .superStream(MessagingNames.STREAM_TELEMETRY)

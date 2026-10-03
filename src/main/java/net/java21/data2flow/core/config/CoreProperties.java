@@ -156,7 +156,7 @@ public record CoreProperties(String webBaseUrl, String authBaseUrl, Tokens token
      * @param homeInterval      {@code home-summary} 묶음 간격(5초)
      * @param ingestInterval    {@code ingest-stats} 간격(5초)
      * @param messagePoll       {@code ingest-messages} 원본 메시지 폴링 간격(1초)
-     * @param streamRetry       텔레메트리 스트림 연결 실패 시 다시 시도 간격(30초)
+     * @param streamRetry       텔레메트리 스트림 연결 실패·스트림 없음 시 다시 시도 간격(10초)
      * @param queueCapacity     연결마다 보낼 이벤트 대기열 상한(1000). 넘치면 버린다(손실 허용, 느린 클라이언트가 소비자를 막지 않게)
      */
     public record Live(Boolean telemetryEnabled, String developer, Boolean eventsEnabled, Boolean schedulerEnabled,
@@ -173,7 +173,7 @@ public record CoreProperties(String webBaseUrl, String authBaseUrl, Tokens token
             homeInterval = homeInterval == null ? Duration.ofSeconds(5) : homeInterval;
             ingestInterval = ingestInterval == null ? Duration.ofSeconds(5) : ingestInterval;
             messagePoll = messagePoll == null ? Duration.ofSeconds(1) : messagePoll;
-            streamRetry = streamRetry == null ? Duration.ofSeconds(30) : streamRetry;
+            streamRetry = streamRetry == null ? Duration.ofSeconds(10) : streamRetry;
             queueCapacity = queueCapacity == null || queueCapacity < 10 ? 1000 : queueCapacity;
         }
     }

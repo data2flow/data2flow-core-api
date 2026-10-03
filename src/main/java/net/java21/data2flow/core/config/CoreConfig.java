@@ -3,6 +3,10 @@ package net.java21.data2flow.core.config;
 import org.flywaydb.core.Flyway;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.flyway.autoconfigure.FlywayMigrationStrategy;
+import net.java21.data2flow.contracts.web.ErrorMessages;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnNotWebApplication;
+import org.springframework.context.MessageSource;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
@@ -16,6 +20,16 @@ import java.time.Clock;
 public class CoreConfig {
 
     /** 운영 코드는 이 시계만 쓴다(ArchUnit NO_SYSTEM_CLOCK). 테스트는 MutableClock으로 바꾼다 */
+    /**
+     * 웹이 아닌 실행(최초 관리자 Job: {@code --spring.main.web-application-type=none})에서도 컨트롤러가 받는 오류 문구 빈을 둔다.
+     * contracts는 서블릿 웹 앱에서만 만들어 주므로, 없으면 Job이 컨텍스트를 띄우지 못한다(IAM-01.01 부트스트랩, M2 시연에서 발견).
+     */
+    @Bean
+    @ConditionalOnNotWebApplication
+    ErrorMessages nonWebErrorMessages(ObjectProvider<MessageSource> messageSource) {
+        return new ErrorMessages(messageSource.getIfAvailable());
+    }
+
     @Bean
     Clock clock() {
         return Clock.systemUTC();
