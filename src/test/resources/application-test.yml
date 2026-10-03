@@ -17,6 +17,10 @@ data2flow:
       relay-enabled: false
     jobs:
       enabled: false
+    # 실시간 화면(WP-F): 텔레메트리 스트림은 스트림 IT만 켜고, 주기 작업은 테스트가 직접 부른다
+    live:
+      telemetry-enabled: false
+      scheduler-enabled: false
 logging:
   level:
     net.java21.data2flow: INFO
