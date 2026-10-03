@@ -6,6 +6,7 @@ import net.java21.data2flow.contracts.error.BusinessException;
 import net.java21.data2flow.contracts.identity.CurrentUser;
 import net.java21.data2flow.contracts.message.event.DeviceChanged.Change;
 import net.java21.data2flow.core.audit.service.Audits;
+import net.java21.data2flow.core.space.service.SemanticService;
 import net.java21.data2flow.core.device.domain.Device;
 import net.java21.data2flow.core.device.domain.DeviceErrorCode;
 import net.java21.data2flow.core.device.domain.DeviceRules;
@@ -57,11 +58,12 @@ public class DeviceApprovalService {
     private final DynamicGroupMembership groups;
     private final DeviceCredentialService credentials;
     private final Audits audits;
+    private final SemanticService semantic;
     private final Clock clock;
 
     public DeviceApprovalService(RoleChecker roleChecker, DeviceAccess access, DeviceRepository devices, DeviceReferenceRepository refs,
                                  DiscoveryRepository discovery, DeviceViews views, DeviceEvents events, DynamicGroupMembership groups,
-                                 DeviceCredentialService credentials, Audits audits, Clock clock) {
+                                 DeviceCredentialService credentials, Audits audits, SemanticService semantic, Clock clock) {
         this.roleChecker = roleChecker;
         this.access = access;
         this.devices = devices;
@@ -72,6 +74,7 @@ public class DeviceApprovalService {
         this.groups = groups;
         this.credentials = credentials;
         this.audits = audits;
+        this.semantic = semantic;
         this.clock = clock;
     }
 
@@ -124,6 +127,8 @@ public class DeviceApprovalService {
             devices.replaceTags(org, id, mergedTags, now);
             SourceRef source = refs.findSource(org, device.sourceId()).orElse(null);
             String signingKey = source != null && source.platformBroker() ? credentials.issueOnApproval(device, user.userId()) : null;
+            // BR-DEV-32: 승인할 때 모델의 시맨틱 템플릿으로 장비·점을 만든다(DEV-13.01)
+            semantic.applyModelTemplate(org, id);
             Device after = devices.findById(org, id).orElseThrow();
             events.changed(after, Change.APPROVED, List.of("status", "modelId", "spaceId"));
             audits.record(audits.event(org, DeviceAudits.DEVICE_APPROVED).actor(user).target("DEVICE", Long.toString(id))

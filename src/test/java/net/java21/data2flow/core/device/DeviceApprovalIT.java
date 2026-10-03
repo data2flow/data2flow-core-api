@@ -75,6 +75,21 @@ class DeviceApprovalIT extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("[DEV-13.01][BR-DEV-32] 승인할 때 모델의 시맨틱 템플릿으로 장비·점이 만들어진다 — TC-DEV-304")
+    void approveAppliesSemanticTemplate() throws Exception {
+        jdbc.sql("UPDATE data2flow_core.device_models SET semantic_template = CAST(:t AS jsonb) WHERE id = :m")
+                .param("t", "{\"equipClass\":\"Air_Quality_Sensor\",\"points\":[{\"metricKey\":\"temperature\",\"pointType\":\"MEASUREMENT\",\"quantity\":\"Temperature\",\"tags\":[\"air\"]}]}")
+                .param("m", model).update();
+        long a = data.device(org, source, "sem-1", "PENDING", null, null);
+        mvc.perform(as(org, admin, json(post("/core/devices/approve"), approveBody(model, room, item(a, 0)))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.response.results[0].ok").value(true));
+        assertThat(jdbc.sql("""
+                        SELECT p.metric_key FROM data2flow_core.points p JOIN data2flow_core.equipment e ON e.id = p.equipment_id
+                         WHERE e.device_id = :d""").param("d", a).query(String.class).list()).containsExactly("temperature");
+    }
+
+    @Test
     @DisplayName("[DEV-02.03][AT-DEV-03.6] 같은 기기를 두 번 승인하면 두 번째는 409 DEVICE_STATE_CONFLICT(항목별), 모델·공간 필수 400, 없는 모델 404 — TC-DEV-044")
     void approveConflictsAndValidation() throws Exception {
         long a = data.device(org, source, "q1", "PENDING", null, null);
