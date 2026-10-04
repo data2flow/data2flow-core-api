@@ -180,7 +180,7 @@ class ControlSafetyIT extends AlarmItSupport {
         assertThat(req.organizationId()).isEqualTo(org);
         mvc.perform(as(org, admin, get("/core/control-schedules"))).andExpect(jsonPath("$.responses[0].nextRunAt").value("2026-10-04T00:05:00Z"))
                 .andExpect(jsonPath("$.responses[0].lastRun.status").value("SENT"))
-                .andExpect(jsonPath("$.responses[0].lastRun.holidayCheck").value("UNAVAILABLE"));
+                .andExpect(jsonPath("$.responses[0].lastRun.holidayCheck").value("WORKDAY"));
         mvc.perform(as(org, admin, post("/core/control-schedules/" + id + "/disable"))).andExpect(jsonPath("$.response.enabled").value(false));
         clock.advance(Duration.ofDays(1));
         jobs.minute();

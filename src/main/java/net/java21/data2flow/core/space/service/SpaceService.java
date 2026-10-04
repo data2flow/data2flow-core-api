@@ -70,15 +70,17 @@ public class SpaceService {
     private final SpaceSupport support;
     private final RoleChecker roleChecker;
     private final Clock clock;
+    private final SpaceModes modes;
 
     public SpaceService(SpaceRepository spaces, SpaceSettingsRepository settings, FloorplanRepository floorplans,
-                        SpaceSupport support, RoleChecker roleChecker, Clock clock) {
+                        SpaceSupport support, RoleChecker roleChecker, Clock clock, SpaceModes modes) {
         this.spaces = spaces;
         this.settings = settings;
         this.floorplans = floorplans;
         this.support = support;
         this.roleChecker = roleChecker;
         this.clock = clock;
+        this.modes = modes;
     }
 
     /**
@@ -221,7 +223,7 @@ public class SpaceService {
                 r.status(), r.version(), r.updatedAt(), ancestors, SpaceSupport.zone(chain).getId(),
                 spaces.countChildren(org, s.id()), spaces.countDevicesUnder(org, s.path()),
                 floorplans.findBySpace(org, s.id()).isPresent(), targets, SpaceInheritance.scheduleResponse(chain, schedule),
-                SpaceInheritance.modeResponse(SpaceInheritance.mode(chain, schedule.slots(), clock.instant())), s.virtual(), s.sandbox());
+                SpaceInheritance.modeResponse(modes.modeOf(chain, schedule.slots(), clock.instant())), s.virtual(), s.sandbox());
     }
 
     /** API-DEV-02 공간 만들기 */

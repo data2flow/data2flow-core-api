@@ -43,14 +43,16 @@ public class SpaceSettingsService {
     private final SpaceSupport support;
     private final DeploymentOrganization deployment;
     private final java.time.Clock clock;
+    private final SpaceModes modes;
 
     public SpaceSettingsService(SpaceRepository spaces, SpaceSettingsRepository settings, SpaceSupport support,
-                                DeploymentOrganization deployment, java.time.Clock clock) {
+                                DeploymentOrganization deployment, java.time.Clock clock, SpaceModes modes) {
         this.spaces = spaces;
         this.settings = settings;
         this.support = support;
         this.deployment = deployment;
         this.clock = clock;
+        this.modes = modes;
     }
 
     /** 목표 조회(GET …/targets, 사전 작업으로 추가) */
@@ -187,9 +189,8 @@ public class SpaceSettingsService {
 
     private ModeResponse modeOf(Space space) {
         List<Space> chain = support.chain(space);
-        List<ScheduleSlot> slots = SpaceInheritance.schedule(chain,
-                settings.findSlots(space.organizationId(), chain.stream().map(Space::id).toList())).slots();
-        return SpaceInheritance.modeResponse(SpaceInheritance.mode(chain, slots, clock.instant()));
+        // BR-DEV-23: 수동 지정 > 유지보수 > 달력 > 시간표(M5)
+        return SpaceInheritance.modeResponse(modes.modeOf(chain, clock.instant()));
     }
 
     /** API-DEV-126 내부: 운영 모드(flow-engine·analytics). 조직은 공간 행에서 정하고, 배포 조직 밖은 404 */
