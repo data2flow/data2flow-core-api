@@ -32,7 +32,13 @@ public final class SourceConfigValidator {
 
     public static final Set<String> MQTT_KEYS = Set.of("url", "clientIdBase", "protocolVersion", "qos", "keepaliveSec", "cleanStart",
             "sessionExpirySec", "receiveMaximum", "sharedGroup", "retainHandling", "auth", "username", "headerName", "headerScheme",
-            "tlsInsecure");
+            "tlsInsecure", "tls");
+    /** Webhook 수신(DSC-01.03, ingress WebhookConnector 설정과 같은 이름) */
+    public static final Set<String> WEBHOOK_KEYS = Set.of("sourceKey", "toleranceSec", "idHeader", "topic");
+    public static final Pattern WEBHOOK_SOURCE_KEY = Pattern.compile("[A-Za-z0-9_-]{16,64}");
+    /** TLS 설정(DSC-09.06, BR-DSC-29): 검증 끄기(개발 소스만)·최소 버전 1.2 이상·SNI·인증서 고정(SHA-256) */
+    public static final Set<String> TLS_KEYS = Set.of("verify", "minVersion", "sni", "pinnedSha256");
+    private static final Pattern PIN = Pattern.compile("(sha256/)?([A-Fa-f0-9]{64}|[A-Za-z0-9+/]{43}=)");
     public static final Set<String> PLATFORM_BROKER_KEYS = Set.of("deviceKeyPattern", "allowedFormats");
     public static final Set<String> SIMULATION_KEYS = Set.of("scenarioId");
 
@@ -96,6 +102,9 @@ public final class SourceConfigValidator {
             case SourceTypes.MQTT_SUBSCRIBE -> mqtt(c, isDev);
             case SourceTypes.PLATFORM_BROKER -> platformBroker(c);
             case SourceTypes.SIMULATION -> unknownKeys(c, SIMULATION_KEYS);
+            case SourceTypes.WEBHOOK -> webhook(c);
+            // 카탈로그 커넥터 설정은 커넥터 스키마로 검증한다(BR-DSC-22, DataSourceService). 여기서는 TLS 규칙만
+            case SourceTypes.CONNECTOR -> tls(c, isDev);
             default -> reject("type", "UNSUPPORTED");
         }
         return c;
@@ -162,9 +171,73 @@ public final class SourceConfigValidator {
                 reject("connection.headerName", "Pattern");
             }
         }
-        if (bool(c, "tlsInsecure") && !isDev) {
+        tls(c, isDev);
+    }
+
+    /**
+     * TLS 규칙(DSC-09.06, BR-DSC-29): {@code tlsInsecure=true}나 {@code tls.verify=false}는 개발 소스({@code isDev})만, {@code tls.minVersion}은
+     * 1.2·1.3, {@code tls.sni}는 호스트 이름, {@code tls.pinnedSha256[]}는 SHA-256(hex 64자 또는 Base64) 최대 5개
+     */
+    public void tls(ObjectNode c, boolean isDev) {
+        boolean insecure = c.path("tlsInsecure").isBoolean() && c.get("tlsInsecure").asBoolean();
+        JsonNode t = c.get("tls");
+        if (t != null && !t.isNull()) {
+            if (!t.isObject()) {
+                reject("connection.tls", "Type");
+                return;
+            }
+            for (String key : t.propertyNames()) {
+                if (!TLS_KEYS.contains(key)) {
+                    reject("connection.tls." + key, "UNKNOWN_FIELD");
+                }
+            }
+            if (t.has("verify") && !t.get("verify").isBoolean()) {
+                reject("connection.tls.verify", "Type");
+            }
+            insecure |= t.has("verify") && t.get("verify").isBoolean() && !t.get("verify").asBoolean();
+            String min = t.path("minVersion").isString() ? t.get("minVersion").asString() : null;
+            if (t.has("minVersion") && !"1.2".equals(min) && !"1.3".equals(min)) {
+                reject("connection.tls.minVersion", "MIN_TLS_1_2");
+            }
+            if (t.has("sni") && (!t.get("sni").isString() || !t.get("sni").asString().matches("[A-Za-z0-9.-]{1,253}"))) {
+                reject("connection.tls.sni", "Pattern");
+            }
+            JsonNode pins = t.get("pinnedSha256");
+            if (pins != null && !pins.isNull()) {
+                if (!pins.isArray() || pins.size() > 5) {
+                    reject("connection.tls.pinnedSha256", "INVALID");
+                } else {
+                    for (JsonNode pin : pins) {
+                        if (!pin.isString() || !PIN.matcher(pin.asString()).matches()) {
+                            reject("connection.tls.pinnedSha256", "Pattern");
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (insecure && !isDev) {
             throw new BusinessException(SourceErrorCode.SOURCE_TLS_VERIFY_REQUIRED,
-                    List.of(new FieldErrorDetail("connection.tlsInsecure", "TLS_VERIFY_REQUIRED", null)));
+                    List.of(new FieldErrorDetail(c.has("tlsInsecure") ? "connection.tlsInsecure" : "connection.tls.verify",
+                            "TLS_VERIFY_REQUIRED", null)));
+        }
+    }
+
+    /** Webhook 수신 설정(DSC-01.03, BR-DSC-10). sourceKey가 없으면 서비스가 만든다 */
+    private void webhook(ObjectNode c) {
+        unknownKeys(c, WEBHOOK_KEYS);
+        String key = text(c, "sourceKey");
+        if (key != null && !WEBHOOK_SOURCE_KEY.matcher(key).matches()) {
+            reject("connection.sourceKey", "Pattern");
+        }
+        intRange(c, "toleranceSec", 30, 3600);
+        String id = text(c, "idHeader");
+        if (id != null && !HEADER_NAME.matcher(id).matches()) {
+            reject("connection.idHeader", "Pattern");
+        }
+        String topic = text(c, "topic");
+        if (topic != null && (topic.isBlank() || topic.length() > 128 || !checkTopic(topic) || topic.contains("+") || topic.contains("#"))) {
+            reject("connection.topic", "Pattern");
         }
     }
 

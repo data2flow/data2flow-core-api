@@ -18,13 +18,15 @@ public final class SourceModels {
     public static final Set<String> LIFECYCLES = Set.of(DRAFT, ACTIVE, PAUSED, ARCHIVED);
 
     /** M2에서 화면·API로 만들 수 있는 기본 유형(DSC-01.02). 그 밖의 유형은 카탈로그 커넥터(CONNECTOR, DSC-09)로 */
-    public static final Set<String> BASIC_TYPES = Set.of(SourceTypes.MQTT_SUBSCRIBE, SourceTypes.PLATFORM_BROKER, SourceTypes.SIMULATION);
+    public static final Set<String> BASIC_TYPES = Set.of(SourceTypes.MQTT_SUBSCRIBE, SourceTypes.PLATFORM_BROKER, SourceTypes.SIMULATION,
+            SourceTypes.WEBHOOK);
 
     /** 기본 유형 → 카탈로그 커넥터 키(V202610050940 시드, 웹 CONNECTOR_TYPES와 같음) */
     public static final Map<String, String> CONNECTOR_OF_TYPE = Map.of(
             SourceTypes.MQTT_SUBSCRIBE, "mqtt",
             SourceTypes.PLATFORM_BROKER, "platform-broker",
-            SourceTypes.SIMULATION, "simulation");
+            SourceTypes.SIMULATION, "simulation",
+            SourceTypes.WEBHOOK, "webhook");
 
     public static final String DECODER_CHIRPSTACK = "chirpstack-v4";
     public static final String DECODER_GENERIC_JSON = "generic-json";
@@ -48,6 +50,36 @@ public final class SourceModels {
     private SourceModels() {
     }
 
+    /** 커넥터 설정에 인증 방식이 없을 때(받을 수 있는 비밀값을 넓게, DSC-09.05) */
+    public static final String AUTH_ANY = "ANY";
+
+    /**
+     * 비밀값 매트릭스에 쓰는 인증 방식 이름. MQTT 구독은 {@code connection.auth}(없으면 NONE), 카탈로그 커넥터는 {@code connection.auth}
+     * 또는 {@code connection.auth.type}(HTTP)·Kafka {@code saslMechanism}(없으면 ANY), 그 밖은 NONE
+     */
+    public static String authOf(String type, JsonNode connection) {
+        JsonNode a = connection == null ? null : connection.get("auth");
+        if (net.java21.data2flow.contracts.message.SourceTypes.CONNECTOR.equals(type)) {
+            if (a != null && a.isObject()) {
+                a = a.get("type");
+            }
+            if (a != null && a.isString() && !a.asString().isBlank()) {
+                return a.asString().strip().toUpperCase(java.util.Locale.ROOT);
+            }
+            JsonNode sasl = connection == null ? null : connection.get("saslMechanism");
+            JsonNode protocol = connection == null ? null : connection.get("securityProtocol");
+            if (protocol != null && protocol.isString() && protocol.asString().toUpperCase(java.util.Locale.ROOT).startsWith("SASL")) {
+                String m = sasl == null || !sasl.isString() ? "SCRAM-SHA-512" : sasl.asString().toUpperCase(java.util.Locale.ROOT);
+                return m.equals("PLAIN") ? "SASL_PLAIN" : m.endsWith("256") ? "SASL_SCRAM_256" : "SASL_SCRAM_512";
+            }
+            return AUTH_ANY;
+        }
+        if (!net.java21.data2flow.contracts.message.SourceTypes.MQTT_SUBSCRIBE.equals(type)) {
+            return AUTH_NONE;
+        }
+        return a == null || a.isNull() ? AUTH_NONE : a.asString(AUTH_NONE).toUpperCase(java.util.Locale.ROOT);
+    }
+
     /**
      * {@code data_sources} 한 행. connection·tls·payload·decoderConfig는 JSON(없으면 null).
      */
@@ -58,10 +90,9 @@ public final class SourceModels {
                              int noDataAlarmAfterSec, Long siteId, Instant archivedAt, int version, Instant createdAt,
                              Instant updatedAt) {
 
-        /** connection.auth(MQTT). 없으면 NONE */
+        /** 인증 방식({@link #authOf}) */
         public String auth() {
-            JsonNode a = connection == null ? null : connection.get("auth");
-            return a == null || a.isNull() ? AUTH_NONE : a.asString(AUTH_NONE);
+            return authOf(type, connection);
         }
 
         /** 실제 client-id의 base(BR-DSC-01): connection.clientIdBase, 비면 {@code data2flow-{code}} */
@@ -81,7 +112,12 @@ public final class SourceModels {
     }
 
     /** 비밀값 메타(평문·암호문 없음) */
-    public record SecretMeta(String kind, String kid, String fingerprint, Instant rotatedAt, Instant updatedAt, boolean rotating) {
+    public record SecretMeta(String kind, String kid, String fingerprint, Instant rotatedAt, Instant updatedAt, boolean rotating,
+                             Instant certNotAfter) {
+    }
+
+    /** 교체 중인 새 비밀값(DSC-07.02) */
+    public record PendingRow(String kind, byte[] ciphertext, String fingerprint) {
     }
 
     /** 비밀값 한 건(암호문 포함, 내부 전용) */

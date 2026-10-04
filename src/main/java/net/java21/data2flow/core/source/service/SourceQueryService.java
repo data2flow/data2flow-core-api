@@ -62,14 +62,27 @@ public class SourceQueryService {
     private final SourceReferenceRepository references;
     private final RoleChecker roleChecker;
     private final Clock clock;
+    private final String webhookBaseUrl;
 
     public SourceQueryService(DataSourceRepository sources, SourceHealthRepository health, SourceReferenceRepository references,
-                              RoleChecker roleChecker, Clock clock) {
+                              RoleChecker roleChecker, Clock clock,
+                              @org.springframework.beans.factory.annotation.Value("${data2flow.core.source.webhook-base-url:https://data2flow-hook.java21.net}")
+                              String webhookBaseUrl) {
         this.sources = sources;
         this.health = health;
         this.references = references;
         this.roleChecker = roleChecker;
         this.clock = clock;
+        this.webhookBaseUrl = webhookBaseUrl.endsWith("/") ? webhookBaseUrl.substring(0, webhookBaseUrl.length() - 1) : webhookBaseUrl;
+    }
+
+    /** Webhook 수신 주소(DSC-01.03, API-DSC-54): {@code {base}/ingest/webhook/{sourceKey}}. Webhook이 아니면 null */
+    public String webhookUrl(DataSource s) {
+        if (!net.java21.data2flow.contracts.message.SourceTypes.WEBHOOK.equals(s.type()) || s.connection() == null
+                || !s.connection().path("sourceKey").isString()) {
+            return null;
+        }
+        return webhookBaseUrl + "/ingest/webhook/" + s.connection().get("sourceKey").asString();
     }
 
     /** API-DSC-01 */
@@ -123,6 +136,11 @@ public class SourceQueryService {
 
     /** 상세 응답(생성·수정·복제 응답에도 쓴다) */
     public SourceDetailResponse detail(DataSource s) {
+        return detail(s, null);
+    }
+
+    /** 상세. {@code issued}는 생성 응답에서만(서버가 만든 비밀값 1회 표시) */
+    public SourceDetailResponse detail(DataSource s, net.java21.data2flow.core.source.dto.SourceDtos.IssuedSecret issued) {
         long orgId = s.organizationId();
         Instant now = clock.instant();
         List<SecretMeta> metas = sources.findSecretMeta(orgId, s.id());
@@ -137,9 +155,9 @@ public class SourceQueryService {
                 sources.findTopics(orgId, s.id()).stream().map(t -> new TopicDto(t.topic(), t.qos())).toList(),
                 SourceSecrets.primary(s.type(), s.auth(), metas), metas.stream().map(SourceSecrets::info).toList(), s.decoderKey(),
                 s.decoderConfig(), id(s.decodeScriptId()), s.unknownDevicePolicy(), id(s.defaultModelId()), id(s.defaultSpaceId()),
-                s.autoregLimitPerHour(), s.noDataAlarmAfterSec(), id(s.siteId()), null, s.clientIdBase(), clientIds,
+                s.autoregLimitPerHour(), s.noDataAlarmAfterSec(), id(s.siteId()), webhookUrl(s), s.clientIdBase(), clientIds,
                 runtimes.stream().map(r -> instance(r, now)).toList(), rep.state(), stateDetail(rep, runtimes), stats.lastReceivedAt(),
-                stats.ratePerMin(), stats.decodeErrorRate1h(), s.archivedAt(), s.version(), s.createdAt(), s.updatedAt());
+                stats.ratePerMin(), stats.decodeErrorRate1h(), s.archivedAt(), s.version(), s.createdAt(), s.updatedAt(), issued);
     }
 
     /** API-DSC-14 */

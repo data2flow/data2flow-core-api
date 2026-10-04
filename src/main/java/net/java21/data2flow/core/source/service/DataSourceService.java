@@ -87,10 +87,12 @@ public class DataSourceService {
     private final RoleChecker roleChecker;
     private final Audits audits;
     private final Clock clock;
+    private final SourceRotationService rotations;
 
     public DataSourceService(DataSourceRepository sources, SourceReferenceRepository references, ConnectorCatalogRepository catalog,
                              SourceSecrets secrets, SourceStateService states, SourceQueryService queries, RoleChecker roleChecker,
-                             Audits audits, Clock clock) {
+                             Audits audits, Clock clock, SourceRotationService rotations) {
+        this.rotations = rotations;
         this.sources = sources;
         this.references = references;
         this.catalog = catalog;
@@ -136,8 +138,18 @@ public class DataSourceService {
         boolean isDev = b.path("isDev").asBoolean(false);
         Settings settings = settings(orgId, type, connector, b, null, isDev, limits);
         checkClientIdBase(orgId, type, settings.connection(), code, null);
-        Map<String, Secret> incoming = SourceSecrets.parse(b.get("secret"));
+        Map<String, Secret> incoming = new java.util.TreeMap<>(SourceSecrets.parse(b.get("secret")));
         SourceSecrets.checkKinds(type, auth(type, settings.connection()), incoming);
+        net.java21.data2flow.core.source.dto.SourceDtos.IssuedSecret issued = null;
+        if (SourceTypes.WEBHOOK.equals(type)) {
+            webhookKey(settings.connection(), null, null);
+            if (!incoming.containsKey(SourceSecrets.HMAC_KEY)) {
+                // 서명 비밀값을 서버가 만들어 생성 응답에서 한 번만 보여 준다(TC-DSC-023)
+                String generated = randomToken(32);
+                incoming.put(SourceSecrets.HMAC_KEY, Secret.of(generated));
+                issued = new net.java21.data2flow.core.source.dto.SourceDtos.IssuedSecret(SourceSecrets.HMAC_KEY, generated);
+            }
+        }
         boolean activate = b.path("activate").asBoolean(false);
         if (activate) {
             requireActivatable(type, settings.connection(), settings.topics(), incoming.keySet());
@@ -164,8 +176,41 @@ public class DataSourceService {
                     .detail("from", SourceModels.DRAFT).detail("to", SourceModels.ACTIVE));
         }
         states.configChanged(orgId, id, created.version());
-        return queries.detail(created);
+        return queries.detail(created, issued);
     }
+
+    /**
+     * Webhook 수신 키(DSC-01.03): 없으면 32자 난수로 만들고, 있으면 모든 조직에서 하나뿐이어야 한다. 만든 뒤에는 바꿀 수 없다
+     * (외부 시스템의 전송 주소가 바뀌므로). current는 수정 전 키
+     */
+    private void webhookKey(ObjectNode connection, String current, Long sourceId) {
+        String key = connection.path("sourceKey").isString() ? connection.get("sourceKey").asString() : null;
+        if (current != null) {
+            if (key != null && !key.equals(current)) {
+                throw new BusinessException(CommonErrorCode.INVALID_REQUEST,
+                        List.of(new FieldErrorDetail("connection.sourceKey", "IMMUTABLE", null)));
+            }
+            connection.put("sourceKey", current);
+            return;
+        }
+        if (key == null) {
+            key = randomToken(16);
+            connection.put("sourceKey", key);
+        }
+        if (sources.existsWebhookSourceKey(key, sourceId)) {
+            throw new BusinessException(SourceErrorCode.SOURCE_CONFIG_INVALID,
+                    List.of(new FieldErrorDetail("connection.sourceKey", "DUPLICATE", null)), "connection.sourceKey");
+        }
+    }
+
+    /** URL에 써도 되는 난수 문자열(바이트 수 × 2 길이의 16진수) */
+    static String randomToken(int bytes) {
+        byte[] b = new byte[bytes];
+        RANDOM.nextBytes(b);
+        return java.util.HexFormat.of().formatHex(b);
+    }
+
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
 
     // ---------------------------------------------------------------- 수정
 
@@ -205,6 +250,9 @@ public class DataSourceService {
         SourceLimits limits = references.findLimits(orgId);
         Settings settings = settings(orgId, s.type(), connector, body, s, isDev, limits);
         checkClientIdBase(orgId, s.type(), settings.connection(), s.code(), s.id());
+        if (SourceTypes.WEBHOOK.equals(s.type())) {
+            webhookKey(settings.connection(), s.connection() == null ? null : s.connection().path("sourceKey").asString(null), s.id());
+        }
         String auth = auth(s.type(), settings.connection());
         Map<String, Secret> incoming = SourceSecrets.parse(body.get("secret"));
         SourceSecrets.checkKinds(s.type(), auth, incoming);
@@ -241,24 +289,32 @@ public class DataSourceService {
 
     // ---------------------------------------------------------------- 비밀값
 
-    /** API-DSC-05 비밀값 교체({@code {kind, value}}). M2는 저장 즉시 반영(무중단 교체 DSC-07.02는 M5) */
+    /**
+     * API-DSC-05 비밀값 교체({@code {kind, value}}). ACTIVE 소스에 연결된 인스턴스가 있으면 무중단 교체(DSC-07.02, ROTATING)를 시작하고,
+     * 아니면 바로 저장한다(DONE). 진행 상태는 API-DSC-05b
+     */
     @Transactional
     public SecretRotationResponse replaceSecret(long sourceId, JsonNode body) {
         roleChecker.require(Permission.SRC_ADMIN);
         long orgId = roleChecker.currentUser().organizationId();
         Map<String, Secret> incoming = SourceSecrets.parse(body);
-        storeSecrets(orgId, sourceId, incoming);
-        return new SecretRotationResponse(UUID.randomUUID().toString(), "DONE",
+        SourceRotationService.Started started = storeSecrets(orgId, sourceId, incoming);
+        return new SecretRotationResponse(started.rotationId(), started.state(),
                 sources.findSecretMeta(orgId, sourceId).stream().map(SourceSecrets::info).toList());
     }
 
-    /** API-DSC-58 종류 하나 교체({@code {value}}) */
+    /** API-DSC-58 종류 하나 교체({@code {value}}). 종류 이름은 DSC-api §7 표대로 정본 종류로 바꾼다 */
     @Transactional
     public SecretResponse replaceSecretKind(long sourceId, String rawKind, JsonNode body) {
         roleChecker.require(Permission.SRC_ADMIN);
         long orgId = roleChecker.currentUser().organizationId();
         String kind = rawKind == null ? "" : rawKind.toUpperCase(Locale.ROOT).replace('-', '_');
-        if (!SourceSecrets.KINDS.contains(kind)) {
+        kind = switch (kind) {
+            case "USERPASS" -> SourceSecrets.PASSWORD;
+            case "HEADER" -> SourceSecrets.HEADER_VALUE;
+            default -> kind;
+        };
+        if (!SourceSecrets.KINDS.contains(kind) && !"MTLS".equals(kind)) {
             throw new BusinessException(SourceErrorCode.SOURCE_CONFIG_INVALID, List.of(new FieldErrorDetail("kind", "INVALID", null)), "kind");
         }
         ObjectNode node = JsonNodeFactory.instance.objectNode().put("kind", kind);
@@ -266,12 +322,14 @@ public class DataSourceService {
         if (value != null) {
             node.set("value", value);
         }
-        storeSecrets(orgId, sourceId, SourceSecrets.parse(node));
-        SecretMeta meta = sources.findSecretMeta(orgId, sourceId).stream().filter(m -> m.kind().equals(kind)).findFirst().orElseThrow();
-        return new SecretResponse(kind, SourceSecrets.mask(meta.fingerprint()), meta.rotatedAt());
+        Map<String, Secret> incoming = SourceSecrets.parse(node);
+        storeSecrets(orgId, sourceId, incoming);
+        String shown = "MTLS".equals(kind) ? SourceSecrets.CLIENT_CERT : kind;
+        SecretMeta meta = sources.findSecretMeta(orgId, sourceId).stream().filter(m -> m.kind().equals(shown)).findFirst().orElseThrow();
+        return new SecretResponse(shown, SourceSecrets.mask(meta.fingerprint()), meta.rotatedAt());
     }
 
-    private void storeSecrets(long orgId, long sourceId, Map<String, Secret> incoming) {
+    private SourceRotationService.Started storeSecrets(long orgId, long sourceId, Map<String, Secret> incoming) {
         CurrentUser user = roleChecker.currentUser();
         DataSource s = lock(orgId, sourceId);
         if (SourceModels.ARCHIVED.equals(s.lifecycle())) {
@@ -282,11 +340,13 @@ public class DataSourceService {
         }
         SourceSecrets.checkKinds(s.type(), s.auth(), incoming);
         Instant now = clock.instant();
-        Map<String, String> fingerprints = secrets.store(orgId, sourceId, incoming, now);
+        SourceRotationService.Started started = rotations.apply(orgId, s, incoming, user);
         sources.touch(orgId, sourceId, user.userId(), now);
         audits.record(audits.event(orgId, AUDIT_SECRET_CHANGED).actor(user).target(TARGET, Long.toString(sourceId))
-                .detail("kinds", fingerprints.keySet()).detail("fingerprints", masked(fingerprints)));
+                .detail("kinds", started.fingerprints().keySet()).detail("fingerprints", masked(started.fingerprints()))
+                .detail("rotationId", started.rotationId()).detail("state", started.state()));
         states.configChanged(orgId, sourceId, s.version() + 1L);
+        return started;
     }
 
     // ---------------------------------------------------------------- 상태 전이
@@ -406,6 +466,10 @@ public class DataSourceService {
         }
         ObjectNode connection = s.connection() == null ? JsonNodeFactory.instance.objectNode() : ((ObjectNode) s.connection()).deepCopy();
         connection.remove("clientIdBase"); // 같은 base는 BR-DSC-01 위반이라 새 코드의 기본값을 쓴다
+        if (SourceTypes.WEBHOOK.equals(s.type())) {
+            connection.remove("sourceKey"); // 수신 키는 모든 조직에서 하나뿐이라 새로 만든다(DSC-01.03)
+            webhookKey(connection, null, null);
+        }
         Instant now = clock.instant();
         long id = sources.insert(orgId, code, name.strip(), s.type(), s.connectorKey(), s.connectorVersion(), SourceModels.DRAFT,
                 connection.toString(), s.isDev(), s.decoderKey(), s.decoderConfig() == null ? null : s.decoderConfig().toString(),
@@ -502,7 +566,7 @@ public class DataSourceService {
         SourceConfigValidator v = SourceConfigValidator.start();
         ObjectNode connection;
         if (current == null || b.has("connection")) {
-            connection = SourceTypes.CONNECTOR.equals(type) ? connectorConnection(connector, b.get("connection"), v)
+            connection = SourceTypes.CONNECTOR.equals(type) ? connectorConnection(connector, b.get("connection"), v, isDev)
                     : v.connection(type, b.get("connection"), isDev);
         } else {
             connection = current.connection() == null ? JsonNodeFactory.instance.objectNode() : ((ObjectNode) current.connection()).deepCopy();
@@ -568,7 +632,7 @@ public class DataSourceService {
     }
 
     /** 카탈로그 커넥터 설정: 커넥터 스키마로 검증(BR-DSC-22, 스키마에 없는 필드 거부) */
-    private static ObjectNode connectorConnection(Connector connector, JsonNode raw, SourceConfigValidator v) {
+    private static ObjectNode connectorConnection(Connector connector, JsonNode raw, SourceConfigValidator v, boolean isDev) {
         if (raw == null || raw.isNull()) {
             raw = JsonNodeFactory.instance.objectNode();
         }
@@ -579,7 +643,9 @@ public class DataSourceService {
         for (FieldErrorDetail e : JsonSchemaLite.validate(connector.schema(), raw, "connection")) {
             v.reject(e.field(), e.code());
         }
-        return ((ObjectNode) raw).deepCopy();
+        ObjectNode copy = ((ObjectNode) raw).deepCopy();
+        v.tls(copy, isDev); // BR-DSC-29: 운영 소스는 TLS 검증을 끌 수 없다(DSC-09.06)
+        return copy;
     }
 
     /** 유형 → 카탈로그 커넥터. 기본 유형은 시드 키(mqtt·platform-broker·simulation), CONNECTOR는 요청 키(사용 가능해야 함) */
@@ -631,10 +697,7 @@ public class DataSourceService {
     }
 
     static String auth(String type, JsonNode connection) {
-        if (!SourceTypes.MQTT_SUBSCRIBE.equals(type) || connection == null) {
-            return SourceModels.AUTH_NONE;
-        }
-        return connection.path("auth").asString(SourceModels.AUTH_NONE).toUpperCase(Locale.ROOT);
+        return SourceModels.authOf(type, connection);
     }
 
     private DataSource lock(long orgId, long sourceId) {

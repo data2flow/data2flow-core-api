@@ -72,7 +72,7 @@ class SourceDomainTest {
     @DisplayName("[DSC-01.04] 검증기는 문제를 모아 SOURCE_CONFIG_INVALID 하나로, 유형 밖은 type, connection이 객체가 아니면 Type")
     void validatorCollects() {
         SourceConfigValidator v = SourceConfigValidator.start();
-        v.connection("WEBHOOK", null, false);
+        v.connection("EDGE", null, false); // WEBHOOK은 M5(DSC-01.03)부터 받는다
         v.connection("MQTT_SUBSCRIBE", JSON.readTree("[1]"), false);
         assertThat(v.errors()).extracting(FieldErrorDetail::field).containsExactly("type", "connection");
         assertThatThrownBy(v::throwIfInvalid).isInstanceOf(BusinessException.class)

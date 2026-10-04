@@ -39,7 +39,7 @@ spring:
       password: ${DATA2FLOW_RABBITMQ_PASSWORD:guest}
   messages:
     # 도메인별 문구 묶음(ADR-037: ko 원문, en·ja·zh). 오류 문구 키는 error.<코드>
-    basename: messages,i18n/space,i18n/catalog,i18n/device,i18n/source,i18n/script,i18n/annotation,i18n/telemetry,i18n/live,i18n/control,i18n/flow,i18n/sim,i18n/alarm,i18n/retention,i18n/external,i18n/calendar,i18n/board
+    basename: messages,i18n/space,i18n/catalog,i18n/device,i18n/source,i18n/script,i18n/annotation,i18n/telemetry,i18n/live,i18n/control,i18n/flow,i18n/sim,i18n/alarm,i18n/retention,i18n/external,i18n/calendar,i18n/board,i18n/output,i18n/edge
     encoding: UTF-8
     fallback-to-system-locale: false
 server:
@@ -121,3 +121,12 @@ data2flow:
     external:
       holiday-service-key: ${DATA2FLOW_HOLIDAY_SERVICE_KEY:}
       airkorea-service-key: ${DATA2FLOW_AIRKOREA_SERVICE_KEY:}
+    # M5 데이터 소스(DSC-01.03·07.02): Webhook 수신 주소(외부 공개 호스트, ADR-029), 무중단 자격증명 교체(ingress가 교체 프로토콜을 지원한 뒤 켠다)
+    source:
+      webhook-base-url: ${DATA2FLOW_WEBHOOK_BASE_URL:https://data2flow-hook.java21.net}
+      zero-downtime-rotation: ${DATA2FLOW_SOURCE_ZERO_DOWNTIME_ROTATION:false}
+    # M5 엣지(DSC-08.03·08.04): 게시된 에이전트 버전(쉼표, 마지막이 최신), 설치 명령의 이미지·주소
+    edge:
+      agent-versions: ${DATA2FLOW_EDGE_AGENT_VERSIONS:1.0.0}
+      hook-base-url: ${DATA2FLOW_WEBHOOK_BASE_URL:https://data2flow-hook.java21.net}
+      image: ${DATA2FLOW_EDGE_IMAGE:ghcr.io/data2flow/data2flow-edge}

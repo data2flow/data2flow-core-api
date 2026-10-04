@@ -163,7 +163,7 @@ class DataSourceIT extends SourceItSupport {
                 .andExpect(jsonPath("$.errors[0].field").value("code"));
         mvc.perform(as(org, integrator, json(post("/core/sources"), "{\"code\":\"x1\",\"name\":\"\"}")))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.errors.length()").value(2));
-        mvc.perform(as(org, integrator, json(post("/core/sources"), mqttBody("wh", null).replace("MQTT_SUBSCRIBE", "WEBHOOK"))))
+        mvc.perform(as(org, integrator, json(post("/core/sources"), mqttBody("wh", null).replace("MQTT_SUBSCRIBE", "EDGE"))))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.errors[0].field").value("type"));
     }
 
@@ -183,7 +183,10 @@ class DataSourceIT extends SourceItSupport {
                         .replace("\"secret\":{\"kind\":\"USERPASS\",\"value\":\"pw-123\"},", "").replace("\"decoderKey\"", "\"activate\":true,\"decoderKey\""))))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.header.resultCode").value("SOURCE_SECRET_REQUIRED"));
 
-        String pem = "-----BEGIN CERTIFICATE-----\\nMIIBcert\\n-----END CERTIFICATE-----\\n-----BEGIN PRIVATE KEY-----\\nMIIEkey\\n-----END PRIVATE KEY-----";
+        // DSC-09.06: 인증서는 실제 X.509로 읽는다(만료 시각 기록)
+        String pem = new String(getClass().getResourceAsStream("/fixtures/tls/test-ca.pem").readAllBytes(),
+                java.nio.charset.StandardCharsets.US_ASCII).strip().replace("\n", "\\n")
+                + "\\n-----BEGIN PRIVATE KEY-----\\nMIIEkey\\n-----END PRIVATE KEY-----";
         String mtls = mqttBody("mtls", null).replace("wss://broker.test:443/mqtt", "ssl://broker.test:8883")
                 .replace("\"auth\":\"HEADER\",\"headerName\":\"Authorization\"", "\"auth\":\"MTLS\"")
                 .replace("{\"kind\":\"HEADER\",\"value\":\"student:s3cr3t-Pa55\"}", "{\"kind\":\"MTLS\",\"value\":\"" + pem + "\"}");
@@ -193,8 +196,9 @@ class DataSourceIT extends SourceItSupport {
         mvc.perform(as(org, integrator, json(post("/core/sources"), mtls.replace("\"code\":\"mtls\"", "\"code\":\"mtls2\"").replace(pem, "not-a-pem"))))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.errors[0].field").value("secret.value"));
         // {cert, key, ca} 모양
+        String certOnly = pem.substring(0, pem.indexOf("\\n-----BEGIN PRIVATE KEY"));
         mvc.perform(as(org, integrator, json(post("/core/sources"), mtls.replace("\"code\":\"mtls\"", "\"code\":\"mtls3\"")
-                        .replace("{\"kind\":\"MTLS\",\"value\":\"" + pem + "\"}", "{\"cert\":\"C\",\"key\":\"K\",\"ca\":\"A\"}"))))
+                        .replace("{\"kind\":\"MTLS\",\"value\":\"" + pem + "\"}", "{\"cert\":\"" + certOnly + "\",\"key\":\"K\",\"ca\":\"" + certOnly + "\"}"))))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.response.secrets.length()").value(3));
         // 수정에서 인증 방식을 NONE으로 바꾸면 쓰지 않는 비밀값은 지운다
         mvc.perform(as(org, integrator, json(patch("/core/sources/" + m), "{\"connection\":{\"url\":\"ssl://broker.test:8883\",\"auth\":\"NONE\"},\"baseVersion\":0}")))

@@ -41,7 +41,8 @@ class SourceServiceUnitTest {
         when(deployment.restriction()).thenReturn(OptionalLong.of(42));
         when(versions.sum(ConfigVersions.SOURCES, OptionalLong.of(42))).thenReturn(7L);
         when(sources.listForRuntime(any(), eq(OptionalLong.of(42)))).thenReturn(List.of());
-        var service = new SourceRuntimeConfigService(sources, mock(SourceReferenceRepository.class), mock(SourceSecrets.class), versions, deployment);
+        var service = new SourceRuntimeConfigService(sources, mock(SourceReferenceRepository.class), mock(SourceSecrets.class), versions, deployment,
+                mock(net.java21.data2flow.core.source.repository.SourceRotationRepository.class));
         assertThat(service.runtimeConfig(null, 7L)).isEmpty();
         assertThat(service.runtimeConfig("ACTIVE", 6L)).get().satisfies(r -> assertThat(r.version()).isEqualTo(7));
         verify(sources).listForRuntime(List.of("ACTIVE"), OptionalLong.of(42));
@@ -67,7 +68,7 @@ class SourceServiceUnitTest {
         assertThat(SourceSecrets.mask("ba7816bf")).isEqualTo("••••16bf");
         assertThat(SourceSecrets.mask(null)).isNull();
         assertThat(SourceSecrets.primary("MQTT_SUBSCRIBE", "USERPASS", List.of()).configured()).isFalse();
-        assertThat(SourceSecrets.primary("MQTT_SUBSCRIBE", "NONE", List.of(new SecretMeta("CA_CERT", "k", "12345678", null, null, false))).kind())
+        assertThat(SourceSecrets.primary("MQTT_SUBSCRIBE", "NONE", List.of(new SecretMeta("CA_CERT", "k", "12345678", null, null, false, null))).kind())
                 .isEqualTo("CA_CERT");
         assertThat(SourceSecrets.allowedKinds("SIMULATION", "NONE")).isEmpty();
     }
