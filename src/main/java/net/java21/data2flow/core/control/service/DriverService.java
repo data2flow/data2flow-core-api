@@ -243,17 +243,10 @@ public class DriverService {
         return drivers.findById(organizationId, driverId).orElseThrow(() -> new BusinessException(ControlErrorCode.DRIVER_NOT_FOUND));
     }
 
-    /** 드라이버가 바뀌면 연결된 모델을 쓰는 action 캐시를 지운다 */
+    /** EVT-ACT-04 DRIVER: 드라이버가 바뀌면 action이 그 드라이버에 연결된 제어 프로필만 지운다(ADR-043) */
     private void driverChanged(long organizationId, long driverId) {
-        drivers.findById(organizationId, driverId).ifPresent(d -> {
-            for (long modelId : boundModels(organizationId, driverId)) {
-                publisher.configChanged(EntityType.MODEL, modelId, clock.millis(), organizationId);
-            }
-        });
-    }
-
-    private List<Long> boundModels(long organizationId, long driverId) {
-        return drivers.listBoundModelIds(organizationId, driverId);
+        drivers.findById(organizationId, driverId).ifPresent(d ->
+                publisher.configChanged(EntityType.DRIVER, driverId, d.version(), organizationId));
     }
 
     private void storeSecret(long organizationId, long driverId, JsonNode body) {

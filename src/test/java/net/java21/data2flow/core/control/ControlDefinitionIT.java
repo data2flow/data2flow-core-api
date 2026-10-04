@@ -60,6 +60,9 @@ class ControlDefinitionIT extends LoopItSupport {
         mvc.perform(as(org, viewer, get("/core/capabilities").param("size", "3").param("page", "3")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalCount").value(8)).andExpect(jsonPath("$.responses.length()").value(2));
         assertThat(auditCount(org, "CAPABILITY_CREATED")).isEqualTo(1);
+        // ADR-043: action이 그 기능을 쓰는 제어 프로필만 지우도록 CAPABILITY(id = 기능 이름) 설정 변경을 낸다(생성 v1, 수정 v2)
+        assertThat(configMessages(org)).filteredOn(m -> m.contains("\"CAPABILITY\"") && m.contains("\"custom.Humidifier\""))
+                .hasSize(2).anyMatch(m -> m.contains("\"version\": 2") || m.contains("\"version\":2"));
 
         mvc.perform(get("/internal/core/capabilities").param("organizationId", Long.toString(org)).header("X-CALLER-SERVICE", "data2flow-action"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalCount").value(1))
@@ -107,6 +110,8 @@ class ControlDefinitionIT extends LoopItSupport {
         mvc.perform(as(org, integrator, json(put("/core/drivers/" + lg), """
                         {"name":"LG 에어컨 2","config":{"region":"KR"},"pollingSec":30,"baseVersion":0,"retry":{"maxAttempts":1}}""")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.response.pollingSec").value(30)).andExpect(jsonPath("$.response.version").value(1));
+        // ADR-043: 드라이버 수정은 DRIVER(id = 드라이버 ID) 하나만 낸다(action이 연결된 프로필만 지움)
+        assertThat(configMessages(org)).anyMatch(m -> m.contains("\"DRIVER\"") && m.contains("\"" + lg + "\""));
         mvc.perform(as(org, integrator, json(put("/core/drivers/" + lg), "{\"name\":\"LG\",\"baseVersion\":0}")))
                 .andExpect(status().isConflict());
         mvc.perform(as(org, integrator, json(put("/core/device-models/" + thermostatModel + "/driver"), "{\"driverId\":null}")))

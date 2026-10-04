@@ -155,11 +155,6 @@ public class DriverRepository {
                 .param("org", organizationId).param("id", driverId).query((rs, n) -> rs.getBytes(1)).optional();
     }
 
-    public List<Long> listBoundModelIds(long organizationId, long driverId) {
-        return jdbc.sql("SELECT model_id FROM data2flow_core.driver_bindings WHERE organization_id = :org AND driver_id = :id")
-                .param("org", organizationId).param("id", driverId).query(Long.class).list();
-    }
-
     /** 모델의 기능 jsonb(없는 모델이면 빈 값) */
     public Optional<String> findModelCapabilities(long organizationId, long modelId) {
         return jdbc.sql("SELECT capabilities::text FROM data2flow_core.device_models WHERE organization_id = :org AND id = :id")

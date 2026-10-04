@@ -9,6 +9,8 @@ import net.java21.data2flow.contracts.error.BusinessException;
 import net.java21.data2flow.contracts.error.CommonErrorCode;
 import net.java21.data2flow.contracts.error.FieldErrorDetail;
 import net.java21.data2flow.contracts.identity.CurrentUser;
+import net.java21.data2flow.contracts.message.ConfigChangedMessage;
+import net.java21.data2flow.contracts.message.ConfigChangedMessage.EntityType;
 import net.java21.data2flow.contracts.web.ListApiResponse;
 import net.java21.data2flow.contracts.web.PageParams;
 import net.java21.data2flow.core.audit.service.Audits;
@@ -17,6 +19,7 @@ import net.java21.data2flow.core.control.dto.ControlDtos.CapabilityResponse;
 import net.java21.data2flow.core.control.dto.ControlDtos.CapabilitySummary;
 import net.java21.data2flow.core.control.repository.CapabilityRepository;
 import net.java21.data2flow.core.control.repository.CapabilityRepository.CapabilityRow;
+import net.java21.data2flow.core.messaging.service.CoreEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
@@ -31,6 +34,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * 기능 카탈로그(ACT-01.01·01.02, API-ACT-25): 표준 7종(contracts JSON, 수정 불가) + 조직의 사용자 정의 {@code custom.*}(BR-ACT-22).
@@ -48,8 +52,11 @@ public class CapabilityService {
     private final Audits audits;
     private final JsonMapper json;
     private final Clock clock;
+    private final CoreEventPublisher publisher;
 
-    public CapabilityService(CapabilityRepository repository, RoleChecker roleChecker, Audits audits, JsonMapper json, Clock clock) {
+    public CapabilityService(CapabilityRepository repository, RoleChecker roleChecker, Audits audits, JsonMapper json, Clock clock,
+                             CoreEventPublisher publisher) {
+        this.publisher = publisher;
         this.repository = repository;
         this.roleChecker = roleChecker;
         this.audits = audits;
@@ -121,6 +128,7 @@ public class CapabilityService {
         } catch (DuplicateKeyException ex) {
             throw invalid("name", "DUPLICATED", null);
         }
+        capabilityChanged(user.organizationId(), name, 1);
         audits.record(audits.event(user.organizationId(), AUDIT_CREATED).actor(user).target("CAPABILITY", name));
         return response(definition, now);
     }
@@ -139,9 +147,16 @@ public class CapabilityService {
         Instant now = clock.instant();
         repository.update(user.organizationId(), name, write(definition.attributes()), write(definition.commands()),
                 write(definition.expectedEffects()), definition.matterCluster(), now);
+        capabilityChanged(user.organizationId(), name, definition.version());
         audits.record(audits.event(user.organizationId(), AUDIT_UPDATED).actor(user).target("CAPABILITY", name)
                 .detail("version", definition.version()));
         return response(definition, now);
+    }
+
+    /** EVT-ACT-04 CAPABILITY(id = 기능 이름): action이 그 기능을 쓰는 제어 프로필만 지운다(ADR-043) */
+    private void capabilityChanged(long organizationId, String name, long version) {
+        publisher.config(new ConfigChangedMessage(ConfigChangedMessage.VERSION, UUID.randomUUID(), EntityType.CAPABILITY, name, version,
+                ConfigChangedMessage.Op.UPSERT, Long.toString(organizationId), clock.instant()));
     }
 
     /** API-ACT-41 내부: 조직의 사용자 정의 기능 전체(표준은 contracts) */
