@@ -64,7 +64,7 @@ class ConnectionTestIT extends SourceItSupport {
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.header.resultCode").value("SOURCE_SECRET_REQUIRED"));
         mvc.perform(as(org, integrator, json(post("/core/sources/test"), mqttBody("bad", null).replace("wss://broker.test:443/mqtt", "ftp://x"))))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.header.resultCode").value("SOURCE_CONFIG_INVALID"));
-        mvc.perform(as(org, integrator, json(post("/core/sources/test"), "{\"type\":\"WEBHOOK\"}")))
+        mvc.perform(as(org, integrator, json(post("/core/sources/test"), "{\"type\":\"EDGE\"}")))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.errors[0].field").value("type"));
         assertThat(INGRESS.testBodies).hasSize(1);
 

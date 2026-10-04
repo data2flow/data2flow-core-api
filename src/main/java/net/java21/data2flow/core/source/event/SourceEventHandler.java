@@ -34,6 +34,7 @@ import java.util.Set;
  *   <li>EVT-DSC-03 {@code source.stats.1m} → {@code source_stat_1m}에 더하기(ingress 수신 수 + pipeline 오류 수), 마지막 수신 시각,
  *       무수신 중이었으면 EVT-DSC-05 재개</li>
  *   <li>EVT-DSC-09 {@code connector.catalog.reported} → {@code connector_catalogs} 갱신(BR-DSC-23)</li>
+ *   <li>EVT-DSC-08 {@code source.rotation.progress} → 무중단 자격증명 교체 진행·확정·실패(DSC-07.02)</li>
  * </ul>
  * 보고의 소스가 그 조직에 없으면(삭제됨·잘못된 조직) 무시한다.
  */
@@ -50,9 +51,12 @@ public class SourceEventHandler implements CoreEventHandler {
     private final SourceStateService states;
     private final JsonMapper json;
     private final Clock clock;
+    private final net.java21.data2flow.core.source.service.SourceRotationService rotations;
 
     public SourceEventHandler(DataSourceRepository sources, SourceHealthRepository health, ConnectorCatalogRepository catalog,
-                              SourceStateService states, JsonMapper json, Clock clock) {
+                              SourceStateService states, JsonMapper json, Clock clock,
+                              net.java21.data2flow.core.source.service.SourceRotationService rotations) {
+        this.rotations = rotations;
         this.sources = sources;
         this.health = health;
         this.catalog = catalog;
@@ -63,7 +67,8 @@ public class SourceEventHandler implements CoreEventHandler {
 
     @Override
     public Set<EventType> types() {
-        return Set.of(EventType.SOURCE_RUNTIME_REPORTED, EventType.SOURCE_STATS_1M, EventType.CONNECTOR_CATALOG_REPORTED);
+        return Set.of(EventType.SOURCE_RUNTIME_REPORTED, EventType.SOURCE_STATS_1M, EventType.CONNECTOR_CATALOG_REPORTED,
+                EventType.SOURCE_ROTATION_PROGRESS);
     }
 
     @Override
@@ -72,6 +77,7 @@ public class SourceEventHandler implements CoreEventHandler {
             case SourceRuntimeReported r -> runtime(event.organizationId(), event.occurredAt(), r);
             case SourceStatsReported s -> stats(event.organizationId(), s);
             case ConnectorCatalogReported c -> catalog(c);
+            case net.java21.data2flow.contracts.message.event.SourceRotationProgress p -> rotations.progress(event.organizationId(), p);
             default -> log.debug("처리하지 않는 페이로드: {}", event.type());
         }
     }

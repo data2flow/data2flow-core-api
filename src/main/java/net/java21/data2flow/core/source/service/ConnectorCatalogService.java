@@ -73,7 +73,8 @@ public class ConnectorCatalogService {
         roleChecker.require(Permission.SRC_READ);
         Connector c = catalog.findByKey(key).orElseThrow(() -> new BusinessException(SourceErrorCode.CONNECTOR_NOT_FOUND));
         JsonNode ui = c.schema().get("x-ui");
-        return new ConnectorSchemaResponse(c.key(), c.version(), c.schema(), ui == null ? JsonNodeFactory.instance.objectNode() : ui);
+        return new ConnectorSchemaResponse(c.key(), c.version(), c.schema(), ui == null ? JsonNodeFactory.instance.objectNode() : ui,
+                SourceSecrets.matrixFor(c.authMethods()));
     }
 
     /** API-DSC-56 템플릿 preset(조직 템플릿이 플랫폼 템플릿보다 우선) */

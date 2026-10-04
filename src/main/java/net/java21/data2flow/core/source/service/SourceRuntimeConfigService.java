@@ -57,9 +57,12 @@ public class SourceRuntimeConfigService {
     private final SourceSecrets secrets;
     private final ConfigVersions versions;
     private final DeploymentOrganization deployment;
+    private final net.java21.data2flow.core.source.repository.SourceRotationRepository rotations;
 
     public SourceRuntimeConfigService(DataSourceRepository sources, SourceReferenceRepository references, SourceSecrets secrets,
-                                      ConfigVersions versions, DeploymentOrganization deployment) {
+                                      ConfigVersions versions, DeploymentOrganization deployment,
+                                      net.java21.data2flow.core.source.repository.SourceRotationRepository rotations) {
+        this.rotations = rotations;
         this.sources = sources;
         this.references = references;
         this.secrets = secrets;
@@ -82,6 +85,8 @@ public class SourceRuntimeConfigService {
         List<Long> ids = rows.stream().map(DataSource::id).toList();
         Map<Long, List<SourceTopic>> topics = sources.findTopicsOf(ids);
         Map<Long, List<SourceModels.SecretRow>> secretRows = sources.findSecretsOf(ids);
+        Map<Long, String> activeRotations = rotations.findActiveOf(ids);
+        Map<Long, List<SourceModels.PendingRow>> pending = activeRotations.isEmpty() ? Map.of() : sources.findPendingOf(activeRotations.keySet());
         Map<Long, SourceLimits> limits = references.limitsOf(rows.stream().map(DataSource::organizationId).distinct().toList());
         List<RuntimeSource> result = new ArrayList<>();
         for (DataSource s : rows) {
@@ -96,9 +101,19 @@ public class SourceRuntimeConfigService {
                     s.connectorKey() == null ? SourceModels.CONNECTOR_OF_TYPE.get(s.type()) : s.connectorKey(), s.connectorVersion(),
                     s.lifecycle(), config(s, t), plain, t.stream().map(x -> new TopicDto(x.topic(), x.qos())).toList(), qos,
                     s.clientIdBase(), s.clientIdBase(), s.unknownDevicePolicy(), new RateLimit(l.maxMessagesPerSec(), l.maxMessageBytes(), WARN_RATIO),
-                    s.decoderKey(), s.version()));
+                    s.decoderKey(), s.version(), rotation(s.id(), activeRotations.get(s.id()), pending.get(s.id()))));
         }
         return Optional.of(new RuntimeConfigResponse(version, result));
+    }
+
+    private net.java21.data2flow.core.source.dto.SourceDtos.RuntimeRotation rotation(long sourceId, String rotationId,
+                                                                                     List<SourceModels.PendingRow> rows) {
+        if (rotationId == null || rows == null || rows.isEmpty()) {
+            return null;
+        }
+        Map<String, String> plain = new LinkedHashMap<>();
+        secrets.decryptPending(sourceId, rows).forEach((k, v) -> plain.put(k, v.reveal()));
+        return new net.java21.data2flow.core.source.dto.SourceDtos.RuntimeRotation(rotationId, plain);
     }
 
     /** ingress 커넥터 설정 = connection + topics[] + clientIdBase(+ version: protocolVersion 별칭, ingress MqttSourceSettings가 읽는 이름) */

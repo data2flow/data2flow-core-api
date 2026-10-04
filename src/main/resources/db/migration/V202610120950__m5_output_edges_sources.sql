@@ -104,6 +104,9 @@ CREATE TABLE data2flow_core.source_secret_rotations (
 CREATE INDEX ix_source_secret_rotations_organization_id_source_id ON data2flow_core.source_secret_rotations (organization_id, source_id, started_at DESC);
 COMMENT ON TABLE data2flow_core.source_secret_rotations IS '무중단 자격증명 교체(DSC-07.02, BR-DSC-09). instances = {instanceId: {ok, error, at}}(EVT-DSC-08)';
 
+-- Webhook 수신 키는 모든 조직에서 하나뿐(ingress가 경로 키만으로 소스를 찾는다, API-DSC-54, DSC-01.03)
+CREATE UNIQUE INDEX uq_data_sources_webhook_source_key ON data2flow_core.data_sources ((connection->>'sourceKey')) WHERE type = 'WEBHOOK';
+
 -- ---------------------------------------------------------------- 엣지 게이트웨이(DSC-08.03·08.04)
 CREATE TABLE data2flow_core.edge_gateways (
     id bigint GENERATED ALWAYS AS IDENTITY,
@@ -228,30 +231,30 @@ ON CONFLICT (connector_key) DO NOTHING;
 
 INSERT INTO data2flow_core.connector_templates (organization_id, template_key, connector_key, name, description, preset, decoder_key, docs_url, builtin)
 VALUES (0, 'tts-v3', 'tts-v3', 'The Things Stack v3', 'TTS MQTT 통합(v3/{앱}@{테넌트}/devices/+/up), 비밀번호는 API 키',
-        '{"connection":{"host":"eu1.cloud.thethings.network","applicationId":"","tenantId":"ttn","event":"up","qos":1},"decoderKey":"generic-json"}'::jsonb,
+        '{"connection":{"host":"eu1.cloud.thethings.network","applicationId":"","tenantId":"ttn","event":"up","qos":1},"decoderKey":"generic-json","decoderConfig":{"deviceIdFrom":"$.end_device_ids.dev_eui","timePath":"$.received_at","timeFormat":"ISO8601","metrics":[{"path":"$.uplink_message.decoded_payload.temperature","key":"temperature","unit":"℃"}]}}'::jsonb,
         'generic-json', 'https://www.thethingsindustries.com/docs/integrations/mqtt/', true),
        (0, 'aws-iot-core', 'aws-iot-core', 'AWS IoT Core', '{id}-ats.iot.{region}.amazonaws.com:8883 + X.509 클라이언트 인증서(mTLS)',
-        '{"connection":{"endpoint":"","topics":["dt/+/telemetry"],"qos":1},"decoderKey":"generic-json"}'::jsonb,
+        '{"connection":{"endpoint":"","topics":["dt/+/telemetry"],"qos":1},"decoderKey":"generic-json","decoderConfig":{"deviceIdFrom":"$.deviceId","timePath":"$.ts","timeFormat":"AUTO","metrics":[{"path":"$.temperature","key":"temperature","unit":"℃"}]}}'::jsonb,
         'generic-json', 'https://docs.aws.amazon.com/iot/latest/developerguide/mqtt.html', true),
        (0, 'azure-iot-hub', 'azure-iot-hub', 'Azure IoT Hub (MQTT)', '{hub}.azure-devices.net:8883, 장치 SAS 키(SAS_KEY)로 토큰 생성',
-        '{"connection":{"hubName":"","deviceId":"","sasTtlSec":86400},"decoderKey":"generic-json"}'::jsonb,
+        '{"connection":{"hubName":"","deviceId":"","sasTtlSec":86400},"decoderKey":"generic-json","decoderConfig":{"deviceIdFrom":"$.deviceId","timePath":"$.ts","timeFormat":"AUTO","metrics":[{"path":"$.temperature","key":"temperature","unit":"℃"}]}}'::jsonb,
         'generic-json', 'https://learn.microsoft.com/azure/iot/iot-mqtt-connect-to-iot-hub', true),
        (0, 'hivemq-cloud', 'mqtt', 'HiveMQ Cloud', 'ssl://{클러스터}.s1.eu.hivemq.cloud:8883, 사용자 이름·비밀번호',
-        '{"connection":{"url":"ssl://CLUSTER.s1.eu.hivemq.cloud:8883","protocolVersion":"5.0","qos":1,"keepaliveSec":60,"cleanStart":false,"auth":"USERPASS"},"topics":[{"topic":"devices/+/telemetry","qos":1}],"decoderKey":"generic-json"}'::jsonb,
+        '{"connection":{"url":"ssl://CLUSTER.s1.eu.hivemq.cloud:8883","protocolVersion":"5.0","qos":1,"keepaliveSec":60,"cleanStart":false,"auth":"USERPASS"},"topics":[{"topic":"devices/+/telemetry","qos":1}],"decoderKey":"generic-json","decoderConfig":{"deviceIdFrom":"$.deviceId","timePath":"$.ts","timeFormat":"AUTO","metrics":[{"path":"$.temperature","key":"temperature","unit":"℃"}]}}'::jsonb,
         'generic-json', 'https://www.hivemq.com/docs/hivemq-cloud/', true),
        (0, 'emqx', 'mqtt', 'EMQX', 'tcp://{호스트}:1883 또는 ssl://{호스트}:8883, 사용자 이름·비밀번호',
-        '{"connection":{"url":"tcp://emqx.example.com:1883","protocolVersion":"5.0","qos":1,"keepaliveSec":60,"cleanStart":false,"auth":"USERPASS"},"topics":[{"topic":"sensors/#","qos":1}],"decoderKey":"generic-json"}'::jsonb,
+        '{"connection":{"url":"tcp://emqx.example.com:1883","protocolVersion":"5.0","qos":1,"keepaliveSec":60,"cleanStart":false,"auth":"USERPASS"},"topics":[{"topic":"sensors/#","qos":1}],"decoderKey":"generic-json","decoderConfig":{"deviceIdFrom":"$.deviceId","timePath":"$.ts","timeFormat":"AUTO","metrics":[{"path":"$.temperature","key":"temperature","unit":"℃"}]}}'::jsonb,
         'generic-json', 'https://docs.emqx.com/', true),
        (0, 'sparkplug-b', 'sparkplug-b', 'Sparkplug B', 'spBv1.0/{groupId}/# 구독(NBIRTH·NDATA·DBIRTH·DDATA), 구독 전용',
         '{"connection":{"url":"tcp://broker.example.com:1883","groupId":"+","qos":1}}'::jsonb,
         NULL, 'https://sparkplug.eclipse.org/', true),
        (0, 'rabbitmq', 'amqp091', 'RabbitMQ (AMQP 0-9-1)', 'amqps://{호스트}:5671 큐 구독(기록 뒤 ack)',
-        '{"connection":{"url":"amqps://rabbitmq.example.com:5671","vhost":"/","queue":"telemetry","batchSize":100},"decoderKey":"generic-json"}'::jsonb,
+        '{"connection":{"url":"amqps://rabbitmq.example.com:5671","vhost":"/","queue":"telemetry","batchSize":100},"decoderKey":"generic-json","decoderConfig":{"deviceIdFrom":"$.deviceId","timePath":"$.ts","timeFormat":"AUTO","metrics":[{"path":"$.temperature","key":"temperature","unit":"℃"}]}}'::jsonb,
         'generic-json', 'https://www.rabbitmq.com/docs/', true),
        (0, 'kafka', 'kafka', 'Apache Kafka', 'SASL_SSL·SCRAM-SHA-512, 처음부터 읽기(earliest)',
-        '{"connection":{"bootstrapServers":"kafka.example.com:9093","topics":["iot.telemetry"],"securityProtocol":"SASL_SSL","saslMechanism":"SCRAM-SHA-512","startFrom":"earliest"},"decoderKey":"generic-json"}'::jsonb,
+        '{"connection":{"bootstrapServers":"kafka.example.com:9093","topics":["iot.telemetry"],"securityProtocol":"SASL_SSL","saslMechanism":"SCRAM-SHA-512","startFrom":"earliest"},"decoderKey":"generic-json","decoderConfig":{"deviceIdFrom":"$.deviceId","timePath":"$.ts","timeFormat":"AUTO","metrics":[{"path":"$.temperature","key":"temperature","unit":"℃"}]}}'::jsonb,
         'generic-json', 'https://kafka.apache.org/documentation/', true),
        (0, 'milesight-gateway', 'mqtt', 'Milesight 게이트웨이 (내장 NS MQTT)', 'Milesight UG6x 내장 네트워크 서버의 MQTT 업링크, 사용자 이름·비밀번호',
-        '{"connection":{"url":"tcp://GATEWAY_IP:1883","protocolVersion":"3.1.1","qos":1,"keepaliveSec":60,"cleanStart":false,"auth":"USERPASS"},"topics":[{"topic":"/milesight/uplink","qos":1}],"decoderKey":"generic-json"}'::jsonb,
+        '{"connection":{"url":"tcp://GATEWAY_IP:1883","protocolVersion":"3.1.1","qos":1,"keepaliveSec":60,"cleanStart":false,"auth":"USERPASS"},"topics":[{"topic":"/milesight/uplink","qos":1}],"decoderKey":"generic-json","decoderConfig":{"deviceIdFrom":"$.devEUI","timePath":"$.time","timeFormat":"AUTO","metrics":[{"path":"$.temperature","key":"temperature","unit":"℃"}]}}'::jsonb,
         'generic-json', 'https://support.milesight-iot.com/', true)
 ON CONFLICT (organization_id, template_key) DO NOTHING;

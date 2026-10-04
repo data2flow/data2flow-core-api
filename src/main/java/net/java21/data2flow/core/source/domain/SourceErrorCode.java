@@ -20,7 +20,9 @@ public enum SourceErrorCode implements ErrorCode {
     SITE_LOCATION_REQUIRED(400),
     CONNECTOR_NOT_FOUND(404),
     CONNECTOR_UNAVAILABLE(409),
-    SCRIPT_NOT_FOUND(404);
+    SCRIPT_NOT_FOUND(404),
+    /** 무중단 자격증명 교체 실패: 새 값으로 연결하지 못해 이전 값을 유지(DSC-07.02, BR-DSC-09) */
+    SOURCE_ROTATION_FAILED(409);
 
     private final int httpStatus;
 

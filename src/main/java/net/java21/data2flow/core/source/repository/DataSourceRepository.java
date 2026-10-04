@@ -119,6 +119,16 @@ public class DataSourceRepository {
                 .param("org", organizationId).query(Long.class).single();
     }
 
+    /** Webhook 수신 키는 모든 조직에서 하나뿐이다(ingress가 경로의 키만으로 소스를 찾는다, API-DSC-54) */
+    @OrganizationScopeExempt("수신 경로 키 중복 검사. 결과는 있음·없음만 쓴다")
+    public boolean existsWebhookSourceKey(String sourceKey, Long exceptId) {
+        return jdbc.sql("""
+                        SELECT EXISTS (SELECT 1 FROM data2flow_core.data_sources
+                                        WHERE type = 'WEBHOOK' AND connection->>'sourceKey' = :key
+                                          AND (CAST(:except AS bigint) IS NULL OR id <> :except))""")
+                .param("key", sourceKey).param("except", exceptId).query(Boolean.class).single();
+    }
+
     public boolean existsCode(long organizationId, String code) {
         return jdbc.sql("SELECT count(*) FROM data2flow_core.data_sources WHERE organization_id = :org AND code = :code")
                 .param("org", organizationId).param("code", code).query(Long.class).single() > 0;
@@ -235,11 +245,12 @@ public class DataSourceRepository {
 
     public List<SecretMeta> findSecretMeta(long organizationId, long sourceId) {
         return jdbc.sql("""
-                        SELECT kind, kid, fingerprint, rotated_at, updated_at, pending_ciphertext IS NOT NULL AS rotating
+                        SELECT kind, kid, fingerprint, rotated_at, updated_at, pending_ciphertext IS NOT NULL AS rotating, cert_not_after
                           FROM data2flow_core.source_secrets WHERE organization_id = :org AND source_id = :id ORDER BY kind""")
                 .param("org", organizationId).param("id", sourceId)
                 .query((rs, n) -> new SecretMeta(rs.getString("kind"), rs.getString("kid"), rs.getString("fingerprint"),
-                        Pg.instant(rs, "rotated_at"), Pg.instant(rs, "updated_at"), rs.getBoolean("rotating"))).list();
+                        Pg.instant(rs, "rotated_at"), Pg.instant(rs, "updated_at"), rs.getBoolean("rotating"),
+                        Pg.instant(rs, "cert_not_after"))).list();
     }
 
     public List<SecretRow> findSecrets(long organizationId, long sourceId) {
@@ -267,16 +278,66 @@ public class DataSourceRepository {
     }
 
     public void upsertSecret(long organizationId, long sourceId, String kind, byte[] ciphertext, String kid, String fingerprint,
-                             Instant now) {
+                             Instant certNotAfter, Instant now) {
         jdbc.sql("""
                         INSERT INTO data2flow_core.source_secrets (source_id, organization_id, kind, ciphertext, kid, fingerprint, rotated_at,
-                            created_at, updated_at)
-                        VALUES (:id, :org, :kind, :ct, :kid, :fp, :now, :now, :now)
+                            cert_not_after, created_at, updated_at)
+                        VALUES (:id, :org, :kind, :ct, :kid, :fp, :now, :na, :now, :now)
                         ON CONFLICT (source_id, kind) DO UPDATE
                            SET ciphertext = EXCLUDED.ciphertext, kid = EXCLUDED.kid, fingerprint = EXCLUDED.fingerprint,
-                               pending_ciphertext = NULL, rotated_at = EXCLUDED.rotated_at, updated_at = EXCLUDED.updated_at""")
+                               pending_ciphertext = NULL, pending_kid = NULL, pending_fingerprint = NULL, cert_not_after = EXCLUDED.cert_not_after,
+                               rotated_at = EXCLUDED.rotated_at, updated_at = EXCLUDED.updated_at""")
                 .param("id", sourceId).param("org", organizationId).param("kind", kind).param("ct", ciphertext).param("kid", kid)
-                .param("fp", fingerprint).param("now", Pg.ts(now)).update();
+                .param("fp", fingerprint).param("na", certNotAfter == null ? null : Pg.ts(certNotAfter)).param("now", Pg.ts(now)).update();
+    }
+
+    /** 무중단 교체: 있는 종류에만 새 값을 pending으로 둔다. 바뀐 행 수(0이면 그 종류가 아직 없음) */
+    public int setPendingSecret(long organizationId, long sourceId, String kind, byte[] ciphertext, String kid, String fingerprint,
+                                Instant certNotAfter, Instant now) {
+        return jdbc.sql("""
+                        UPDATE data2flow_core.source_secrets
+                           SET pending_ciphertext = :ct, pending_kid = :kid, pending_fingerprint = :fp, updated_at = :now
+                         WHERE organization_id = :org AND source_id = :id AND kind = :kind""")
+                .param("ct", ciphertext).param("kid", kid).param("fp", fingerprint).param("now", Pg.ts(now))
+                .param("org", organizationId).param("id", sourceId).param("kind", kind).update();
+    }
+
+    /** 교체 확정: pending → 현재 값 */
+    public int updatePendingCommitted(long organizationId, long sourceId, Instant now) {
+        return jdbc.sql("""
+                        UPDATE data2flow_core.source_secrets
+                           SET ciphertext = pending_ciphertext, kid = pending_kid, fingerprint = pending_fingerprint, pending_ciphertext = NULL,
+                               pending_kid = NULL, pending_fingerprint = NULL, rotated_at = :now, updated_at = :now
+                         WHERE organization_id = :org AND source_id = :id AND pending_ciphertext IS NOT NULL""")
+                .param("now", Pg.ts(now)).param("org", organizationId).param("id", sourceId).update();
+    }
+
+    /** 교체 실패: pending 버리기(이전 값 유지) */
+    public int updatePendingDiscarded(long organizationId, long sourceId, Instant now) {
+        return jdbc.sql("""
+                        UPDATE data2flow_core.source_secrets SET pending_ciphertext = NULL, pending_kid = NULL, pending_fingerprint = NULL,
+                               updated_at = :now
+                         WHERE organization_id = :org AND source_id = :id AND pending_ciphertext IS NOT NULL""")
+                .param("now", Pg.ts(now)).param("org", organizationId).param("id", sourceId).update();
+    }
+
+    /** 여러 소스의 교체 중 새 값(실행 설정, 내부 전용) */
+    @OrganizationScopeExempt("ingress 실행 설정(API-DSC-50). 이미 배포 조직으로 좁힌 소스 ID만 넘어온다")
+    public Map<Long, List<net.java21.data2flow.core.source.domain.SourceModels.PendingRow>> findPendingOf(Collection<Long> sourceIds) {
+        Map<Long, List<net.java21.data2flow.core.source.domain.SourceModels.PendingRow>> result = new LinkedHashMap<>();
+        if (sourceIds.isEmpty()) {
+            return result;
+        }
+        jdbc.sql("""
+                        SELECT source_id, kind, pending_ciphertext, pending_fingerprint FROM data2flow_core.source_secrets
+                         WHERE source_id = ANY(CAST(:ids AS bigint[])) AND pending_ciphertext IS NOT NULL""")
+                .param("ids", Pg.bigintArray(sourceIds))
+                .query((rs, n) -> {
+                    result.computeIfAbsent(rs.getLong("source_id"), k -> new ArrayList<>())
+                            .add(new net.java21.data2flow.core.source.domain.SourceModels.PendingRow(rs.getString("kind"), rs.getBytes("pending_ciphertext"), rs.getString("pending_fingerprint")));
+                    return null;
+                }).list();
+        return result;
     }
 
     public int deleteSecretsExcept(long organizationId, long sourceId, Collection<String> keepKinds) {

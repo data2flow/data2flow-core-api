@@ -40,7 +40,12 @@ public final class SourceDtos {
                                        String defaultSpaceId, int autoregLimitPerHour, int noDataAlarmAfterSec, String siteId,
                                        String webhookUrl, String clientIdBase, List<String> clientIds, List<RuntimeInstance> runtime,
                                        String state, StateDetail stateDetail, Instant lastReceivedAt, Double ratePerMin,
-                                       Double decodeErrorRate1h, Instant archivedAt, int version, Instant createdAt, Instant updatedAt) {
+                                       Double decodeErrorRate1h, Instant archivedAt, int version, Instant createdAt, Instant updatedAt,
+                                       IssuedSecret issuedSecret) {
+    }
+
+    /** 서버가 만든 비밀값(Webhook HMAC_KEY, DSC-01.03). 만든 응답에서 한 번만 보이고 다시 조회할 수 없다 */
+    public record IssuedSecret(String kind, String value) {
     }
 
     public record TopicDto(String topic, int qos) {
@@ -50,7 +55,9 @@ public final class SourceDtos {
      * 비밀값 정보(BR-DSC-02). fingerprint는 {@code ••••} + 지문 끝 4자리(원문의 일부가 아니라 SHA-256 지문)
      */
     @JsonInclude(JsonInclude.Include.ALWAYS)
-    public record SecretInfo(String kind, boolean configured, String fingerprint, Instant rotatedAt, boolean rotating) {
+    /** certificateExpiresAt: PEM 인증서(CA_CERT·CLIENT_CERT)의 만료 시각(DSC-09.06, 30일 전부터 화면 경고) */
+    public record SecretInfo(String kind, boolean configured, String fingerprint, Instant rotatedAt, boolean rotating,
+                             Instant certificateExpiresAt) {
     }
 
     /** 인스턴스별 연결 상태(API-DSC-03 runtime[], API-DSC-14). stale=90초 넘게 보고 없음(대표 상태에서 빠짐) */
@@ -115,7 +122,9 @@ public final class SourceDtos {
     public record CatalogResponse(List<ConnectorResponse> connectors, List<TemplateSummary> templates) {
     }
 
-    public record ConnectorSchemaResponse(String key, String version, JsonNode jsonSchema, JsonNode uiHints) {
+    /** authSecretKinds: 인증 방식 → {required[], optional[]} 비밀값 종류(DSC-09.05 인증 방식 매트릭스) */
+    public record ConnectorSchemaResponse(String key, String version, JsonNode jsonSchema, JsonNode uiHints,
+                                          Map<String, Map<String, List<String>>> authSecretKinds) {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -140,10 +149,21 @@ public final class SourceDtos {
                                 String connectorVersion, String lifecycle, JsonNode config, Map<String, String> secrets,
                                 List<TopicDto> topics, int qos, String clientId, String clientIdBase, String unknownDevicePolicy,
                                 RateLimit rateLimit,
-                                String decoderKey, int version) {
+                                String decoderKey, int version, RuntimeRotation rotation) {
         @Override
         public String toString() {
             return "RuntimeSource[id=" + id + ", secrets=" + secrets.keySet() + "]";
+        }
+    }
+
+    /**
+     * 진행 중인 무중단 자격증명 교체(DSC-07.02, BR-DSC-09). ingress는 인스턴스를 하나씩 {@code secrets}(새 값, 복호화)로 다시 연결해 보고
+     * 하고(EVT-DSC-08), 확정되면 다음 실행 설정의 {@code secrets}가 새 값이 되고 이 칸은 사라진다. 없으면 null
+     */
+    public record RuntimeRotation(String rotationId, Map<String, String> secrets) {
+        @Override
+        public String toString() {
+            return "RuntimeRotation[rotationId=" + rotationId + ", secrets=" + secrets.keySet() + "]";
         }
     }
 

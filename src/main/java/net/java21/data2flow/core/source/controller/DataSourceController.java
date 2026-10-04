@@ -35,7 +35,11 @@ public class DataSourceController {
     private final SourceQueryService queries;
     private final ConnectionTestService tests;
 
-    public DataSourceController(DataSourceService service, SourceQueryService queries, ConnectionTestService tests) {
+    private final net.java21.data2flow.core.source.service.SourceRotationService rotationService;
+
+    public DataSourceController(DataSourceService service, SourceQueryService queries, ConnectionTestService tests,
+                                net.java21.data2flow.core.source.service.SourceRotationService rotationService) {
+        this.rotationService = rotationService;
         this.service = service;
         this.queries = queries;
         this.tests = tests;
@@ -86,6 +90,13 @@ public class DataSourceController {
     }
 
     /** API-DSC-58 비밀값 한 종류 교체({value}) — SRC_ADMIN, 200 */
+    /** API-DSC-05b 무중단 교체 진행 상태(DSC-07.02) — SRC_READ */
+    @GetMapping("/core/sources/{source-id}/secret-rotations/{rotation-id}")
+    public ApiResponse<net.java21.data2flow.core.source.service.SourceRotationService.RotationStatus> rotation(
+            @PathVariable("source-id") long sourceId, @PathVariable("rotation-id") String rotationId) {
+        return ApiResponse.success(rotationService.status(sourceId, rotationId));
+    }
+
     @PutMapping("/core/sources/{source-id}/secrets/{kind}")
     public ApiResponse<SecretResponse> replaceSecretKind(@PathVariable("source-id") long sourceId, @PathVariable("kind") String kind,
                                                          @RequestBody JsonNode body) {
