@@ -125,4 +125,25 @@ class TopologyIT extends AlarmItSupport {
                         + " AND target_id = :d AND detail::text LIKE :c").param("org", org).param("d", Long.toString(sensor1))
                 .param("c", "%" + command + "%").query(Long.class).single()).isEqualTo(1);
     }
+
+    @Test
+    @DisplayName("[ACT-08.01][AT-ACT-12.1][TC-ACT-132] 효과 없음 EVT-ACT-04 → WARNING system:COMMAND_NO_EFFECT:{기기}:{능력} 알람 하나(같은 기기·기능의 다음 이벤트는 재발생, 감사도 남김)")
+    void noEffectAlarm() {
+        UUID command = UUID.randomUUID();
+        CommandNoEffect e = new CommandNoEffect(command, sensor1, lab, "Thermostat",
+                new CommandNoEffect.Expected("temperature", ExpectedEffect.Direction.DOWN, 15), CommandNoEffect.Observed.between(29.0, 29.0),
+                clock.instant());
+        deliver(EventType.COMMAND_NO_EFFECT, org, e, clock.instant());
+        long id = alarm("system:COMMAND_NO_EFFECT:" + sensor1 + ":Thermostat");
+        assertThat(alarmStatus(id)).isEqualTo("ACTIVE");
+        assertThat(jdbc.sql("SELECT severity || '|' || source_type || '|' || title || '|' || coalesce(space_id, 0) FROM data2flow_core.alarms WHERE id = :id")
+                .param("id", id).query(String.class).single())
+                .startsWith("WARNING|SYSTEM|제어 효과 없음: ").contains("Thermostat (15분 안 temperature 하강 없음)").endsWith("|" + lab);
+        deliver(EventType.COMMAND_NO_EFFECT, org, new CommandNoEffect(UUID.randomUUID(), sensor1, lab, "Thermostat",
+                new CommandNoEffect.Expected("temperature", ExpectedEffect.Direction.DOWN, 15), CommandNoEffect.Observed.between(29.0, 29.0),
+                clock.instant().plusSeconds(3600)), clock.instant().plusSeconds(3600));
+        assertThat(jdbc.sql("SELECT occurrence_count FROM data2flow_core.alarms WHERE id = :id").param("id", id).query(Integer.class).single())
+                .isEqualTo(2);
+        assertThat(auditCount(org, "COMMAND_NO_EFFECT")).isEqualTo(2);
+    }
 }

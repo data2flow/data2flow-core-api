@@ -50,6 +50,7 @@ public class AlarmService {
     public static final String OSCILLATION = "OSCILLATION";
     public static final String DRIVER_CIRCUIT_OPEN = "DRIVER_CIRCUIT_OPEN";
     public static final String FLOW_STATE = "FLOW_STATE";
+    public static final String COMMAND_NO_EFFECT = "COMMAND_NO_EFFECT";
 
     private final AlarmRepository alarms;
     private final AlarmEventRepository events;
