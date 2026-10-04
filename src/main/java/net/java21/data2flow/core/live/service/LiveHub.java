@@ -221,6 +221,7 @@ public class LiveHub implements SmartLifecycle {
             case AlarmStateChanged p -> alarmState(event.type(), targets, p);
             case NotificationDeliveryResult p -> webNotification(org, targets, p);
             case net.java21.data2flow.contracts.message.event.EmergencyStopChanged p -> emergency(event.type(), targets, p);
+            case net.java21.data2flow.contracts.message.event.DeviceCommissioningChanged p -> commissioning(org, targets, p);
             default -> log.trace("실시간 화면이 쓰지 않는 이벤트 {}", event.type());
         }
     }
@@ -279,6 +280,28 @@ public class LiveHub implements SmartLifecycle {
         for (LiveConnection c : targets) {
             if (c.isOpen() && c.subscription().sources()) {
                 c.send("source-state", body);
+            }
+        }
+    }
+
+    /** 현장 설치 상태(EVT-DEV-14)를 그 기기 공간을 보는 {@code space:{id}} 토픽에 {@code commissioning}으로 보낸다(AT-DEV-28.2) */
+    private void commissioning(long org, Collection<LiveConnection> targets,
+                               net.java21.data2flow.contracts.message.event.DeviceCommissioningChanged p) {
+        Long spaceId = repository.findDevice(org, p.deviceId()).map(DeviceRef::spaceId).orElse(null);
+        if (spaceId == null) {
+            return;
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("deviceId", Long.toString(p.deviceId()));
+        body.put("spaceId", Long.toString(spaceId));
+        body.put("status", p.status());
+        body.put("firstSeenAt", p.firstSeenAt());
+        body.put("checklist", p.checklist());
+        String data = write(body);
+        for (LiveConnection c : targets) {
+            Subscription s = c.subscription();
+            if (c.isOpen() && s.grant().spaceScope().includes(spaceId) && !s.spaceTopicsFor(spaceId).isEmpty()) {
+                c.send("commissioning", data);
             }
         }
     }

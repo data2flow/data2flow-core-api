@@ -48,7 +48,9 @@ public class LiveEventsConfig {
                 EventType.DEVICE_STATE_CHANGED, EventType.SIM_FAULT_STARTED, EventType.SIM_FAULT_ENDED,
                 // M4: 알람(alarms 토픽·API-RUL-14), 웹 알림(notifications 토픽), 유지보수(홈 요약 다시 계산)
                 EventType.NOTIFICATION_DELIVERED, EventType.OPS_MAINTENANCE_STARTED, EventType.OPS_MAINTENANCE_ENDED,
-                EventType.CONTROL_EMERGENCY_STARTED, EventType.CONTROL_EMERGENCY_RELEASED));
+                EventType.CONTROL_EMERGENCY_STARTED, EventType.CONTROL_EMERGENCY_RELEASED,
+                // M5: 현장 설치 상태(설치 현황판 UI-DEV-22, space 토픽 commissioning)
+                EventType.DEVICE_COMMISSIONING_CHANGED));
         for (EventType type : EventType.values()) {
             if (type.routingKey().startsWith("command.status.") || type.routingKey().startsWith(EventType.SIM_RUN_PREFIX)
                     || (type.routingKey().startsWith(EventType.ALARM_PREFIX) && type != EventType.ALARM_SIGNAL)) {

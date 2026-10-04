@@ -28,6 +28,7 @@
         <!-- Argon2id(IAM-02.01): Spring Security crypto가 BouncyCastle 구현을 쓴다. Bouncy Castle Licence(MIT 계열, ADR-018 허용) -->
         <bouncycastle.version>1.86</bouncycastle.version>
         <!-- 테스트 SMTP 서버(초대·재설정 메일 검증). Apache-2.0 -->
+        <zxing.version>3.5.3</zxing.version>
         <greenmail.version>2.1.14</greenmail.version>
     </properties>
 
@@ -122,6 +123,12 @@
         <dependency>
             <groupId>commons-codec</groupId>
             <artifactId>commons-codec</artifactId>
+        </dependency>
+        <!-- 기기 QR 라벨(DEV-09.04): QR 행렬만 만들고 PDF는 직접 그린다. Apache-2.0(ADR-018 허용) -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>${zxing.version}</version>
         </dependency>
 
         <dependency>

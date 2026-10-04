@@ -19,6 +19,12 @@ public class FailureWithResponse extends BusinessException {
         this.response = response;
     }
 
+    /** 문구 인자가 있는 경우(예: COMMISSION_CONFLICT "{0}이(가) {1}에 설치") */
+    public FailureWithResponse(ErrorCode code, List<FieldErrorDetail> errors, Object response, Object... args) {
+        super(code, errors, args);
+        this.response = response;
+    }
+
     public Object response() {
         return response;
     }
