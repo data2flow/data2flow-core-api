@@ -93,7 +93,8 @@ public final class ScriptDtos {
                                        String activeVersionId, String draftVersionId, Instant autoDisabledAt, String autoDisabledReason,
                                        Map<String, Object> config, Instant logCaptureUntil, int version, String updatedBy,
                                        Instant updatedAt, Instant createdAt, ActiveVersion activeVersion, Draft draft,
-                                       List<VersionSummary> versions, List<BindingResponse> bindings, Usage usage) {
+                                       List<VersionSummary> versions, List<BindingResponse> bindings, Usage usage,
+                                       List<ScriptM5Dtos.TestCaseResponse> tests) {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -132,7 +133,8 @@ public final class ScriptDtos {
     }
 
     /** API-SCR-05 응답 */
-    public record DeployResponse(String activeVersionId, int versionNo, Applied applied, Map<String, Object> testResult) {
+    public record DeployResponse(String activeVersionId, int versionNo, Applied applied, Map<String, Object> testResult,
+                                 ScriptM5Dtos.ReprocessSuggestion reprocessSuggestion) {
     }
 
     /** 인스턴스 적용 상태(API-SCR-34 보고 모음). total은 최근 24시간 안에 보고한 적이 있는 인스턴스 수 */
@@ -171,8 +173,8 @@ public final class ScriptDtos {
 
     /** failurePolicy는 연결마다 다르므로 bindings[]에 둔다(대상마다 FAIL_OPEN·FAIL_CLOSED, SCR-02.03) */
     public record RuntimeScript(String scriptId, String organizationId, String kind, String versionId, int versionNo, String code,
-                                String codeSha256, Map<String, Object> config, List<Map<String, Object>> moduleRefs,
-                                List<RuntimeBinding> bindings) {
+                                String codeSha256, Map<String, Object> config, List<Object> moduleRefs,
+                                List<RuntimeBinding> bindings, int configRevision, Instant logCaptureUntil) {
     }
 
     public record RuntimeBinding(String targetType, String targetId, String failurePolicy, boolean enabled) {

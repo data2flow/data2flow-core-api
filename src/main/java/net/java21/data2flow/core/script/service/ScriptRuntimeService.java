@@ -16,6 +16,8 @@ import net.java21.data2flow.core.script.dto.ScriptDtos.RuntimeBundle;
 import net.java21.data2flow.core.script.dto.ScriptDtos.RuntimeScript;
 import net.java21.data2flow.core.script.repository.ScriptRepository;
 import net.java21.data2flow.core.script.repository.ScriptRepository.ScriptRow;
+import net.java21.data2flow.core.script.repository.FormulaMetricRepository;
+import net.java21.data2flow.core.script.repository.ScriptModuleRepository;
 import net.java21.data2flow.core.script.repository.ScriptRuntimeRepository;
 import net.java21.data2flow.core.script.repository.ScriptRuntimeRepository.RuntimeBindingRow;
 import org.springframework.stereotype.Service;
@@ -23,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,6 +45,8 @@ public class ScriptRuntimeService {
     static final Set<String> AUTO_DISABLE_REASONS = Set.of("ERROR_RATE", "TIMEOUT_RATE");
 
     private final ScriptRuntimeRepository runtime;
+    private final ScriptModuleRepository modules;
+    private final FormulaMetricRepository formulas;
     private final ScriptRepository scripts;
     private final ScriptSupport support;
     private final ConfigVersions configVersions;
@@ -49,9 +54,12 @@ public class ScriptRuntimeService {
     private final Audits audits;
     private final Clock clock;
 
-    public ScriptRuntimeService(ScriptRuntimeRepository runtime, ScriptRepository scripts, ScriptSupport support,
-                                ConfigVersions configVersions, DeploymentOrganization deployment, Audits audits, Clock clock) {
+    public ScriptRuntimeService(ScriptRuntimeRepository runtime, ScriptModuleRepository modules, FormulaMetricRepository formulas,
+                                ScriptRepository scripts, ScriptSupport support, ConfigVersions configVersions,
+                                DeploymentOrganization deployment, Audits audits, Clock clock) {
         this.runtime = runtime;
+        this.modules = modules;
+        this.formulas = formulas;
         this.scripts = scripts;
         this.support = support;
         this.configVersions = configVersions;
@@ -62,8 +70,10 @@ public class ScriptRuntimeService {
 
     /**
      * API-SCR-32 실행 묶음: ENABLED이고 ACTIVE 버전이 있는 스크립트의 코드·설정값·연결(대상별 실패 정책). bundleVersion은 SCRIPTS 설정
-     * 버전(조직을 주면 그 조직, 아니면 배포 조직 범위의 합)이고, sinceVersion과 같으면 빈 값(204)이다. 공유 모듈(SCR-04.01)·수식 항목
-     * (SCR-01.06)은 M5라 빈 목록이다.
+     * 버전(조직을 주면 그 조직, 아니면 배포 조직 범위의 합)이고, sinceVersion과 같으면 빈 값(204)이다. M5: 스크립트마다 설정 판
+     * {@code configRevision}·운영 로그 수집 끝 {@code logCaptureUntil}·가져오는 모듈 {@code moduleRefs["이름@버전"]}, 배포된 공유 모듈 버전
+     * {@code modules[]}(SCR-04.01), 수식 항목 {@code formulaMetrics[]}(SCR-01.06, expression이 있어 pipeline이 직접 컴파일한다).
+     * 모듈·수식이 바뀌어도 SCRIPTS 설정 버전이 오른다.
      */
     @Transactional(readOnly = true)
     public Optional<RuntimeBundle> bundle(Long organizationId, Long sinceVersion) {
@@ -87,9 +97,47 @@ public class ScriptRuntimeService {
         List<RuntimeScript> list = runtime.listRuntimeScripts(organizationId, restricted).stream()
                 .map(s -> new RuntimeScript(Long.toString(s.scriptId()), Long.toString(s.organizationId()), s.kind(),
                         Long.toString(s.versionId()), s.versionNo(), s.code(), s.codeSha256(), support.map(s.config()),
-                        support.list(s.moduleRefs()), bindings.getOrDefault(s.scriptId(), List.of())))
+                        moduleRefs(s.moduleRefs()), bindings.getOrDefault(s.scriptId(), List.of()), s.configRevision(),
+                        s.logCaptureUntil()))
                 .toList();
-        return Optional.of(new RuntimeBundle(bundleVersion, list, List.of(), List.of()));
+        List<Map<String, Object>> moduleList = modules.listReleased(organizationId, restricted).stream().map(m -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("organizationId", Long.toString(m.organizationId()));
+            item.put("name", m.name());
+            item.put("versionNo", m.versionNo());
+            item.put("code", m.code());
+            return item;
+        }).toList();
+        List<Map<String, Object>> formulaList = formulas.listForBundle(organizationId, restricted).stream().map(f -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", Long.toString(f.id()));
+            item.put("organizationId", Long.toString(f.organizationId()));
+            item.put("resultKey", f.resultKey());
+            item.put("unit", f.unit());
+            item.put("expression", f.expression());
+            item.put("compiledJs", f.compiledJs());
+            item.put("targetType", f.targetType());
+            item.put("targetId", f.targetId());
+            item.put("status", f.status());
+            return item;
+        }).toList();
+        return Optional.of(new RuntimeBundle(bundleVersion, list, moduleList, formulaList));
+    }
+
+    /** 스크립트 버전의 module_refs(JSON 배열: "이름@버전" 또는 {name, version})를 그대로 */
+    private List<Object> moduleRefs(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        tools.jackson.databind.JsonNode node = support.json().readTree(raw);
+        if (!node.isArray()) {
+            return List.of();
+        }
+        List<Object> out = new java.util.ArrayList<>();
+        for (tools.jackson.databind.JsonNode e : node) {
+            out.add(e.isString() ? e.asString() : support.json().treeToValue(e, Map.class));
+        }
+        return out;
     }
 
     /** API-SCR-34 인스턴스 적용 보고. 같은 인스턴스·버전은 한 행(멱등) */

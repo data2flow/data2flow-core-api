@@ -15,6 +15,12 @@ import net.java21.data2flow.core.script.dto.ScriptDtos.DeployResponse;
 import net.java21.data2flow.core.script.dto.ScriptDtos.SaveDraftRequest;
 import net.java21.data2flow.core.script.dto.ScriptDtos.SaveDraftResponse;
 import net.java21.data2flow.core.script.dto.ScriptDtos.StaticCheck;
+import net.java21.data2flow.core.script.domain.ScriptM5Rules;
+import net.java21.data2flow.core.script.dto.ScriptM5Dtos.ReprocessRequestBody;
+import net.java21.data2flow.core.script.dto.ScriptM5Dtos.ReprocessSuggestion;
+import net.java21.data2flow.core.script.repository.ScriptBindingRepository;
+import net.java21.data2flow.core.script.repository.ScriptBindingRepository.BindingRow;
+import net.java21.data2flow.core.script.repository.ScriptOpsRepository;
 import net.java21.data2flow.core.script.repository.ScriptRepository;
 import net.java21.data2flow.core.script.repository.ScriptRepository.ScriptRow;
 import net.java21.data2flow.core.script.repository.ScriptVersionRepository;
@@ -23,7 +29,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -38,7 +46,8 @@ import java.util.Objects;
  * 배포는 "이전 ACTIVE → ARCHIVED, 대상 → ACTIVE, scripts.active_version_id"를 한 트랜잭션에서 바꾸고 EVT-SCR-01을 아웃박스로 낸다.
  * pipeline은 받은 즉시 API-SCR-32로 묶음을 다시 읽어 10초 안에 적용하고 API-SCR-34로 보고한다. 배포 응답은 기다리지 않고
  * 그 시점의 적용 보고(applied)를 싣는다 — 화면은 상세(API-SCR-04 activeVersion.applied)를 다시 읽어 "2/2 적용"을 갱신한다.
- * 테스트 케이스 자동 확인(SCR-03.03, API-SCR-11)은 M5라 지금은 testResult가 빈 결과다.
+ * DRAFT 배포 전에는 테스트 케이스를 모두 실행한다(SCR-03.03, 실패 시 400 SCRIPT_TEST_FAILED, ADMIN force면 통과). 응답에는 재처리 제안
+ * (SCR-03.06)을 싣는다.
  */
 @Service
 public class ScriptVersionService {
@@ -47,6 +56,9 @@ public class ScriptVersionService {
     static final String AUDIT_DEPLOYED = "SCRIPT_DEPLOYED";
     static final String AUDIT_ROLLED_BACK = "SCRIPT_ROLLED_BACK";
     static final String AUDIT_FORCE_DEPLOYED = "SCRIPT_FORCE_DEPLOYED";
+    /** 배포 후 재처리 제안 기본 기간(SCR-03.06) */
+    static final java.time.Duration REPROCESS_DEFAULT_PERIOD = java.time.Duration.ofDays(7);
+    static final int REPROCESS_MAX_DEVICES = 1000;
 
     private final ScriptRepository scripts;
     private final ScriptVersionRepository versions;
@@ -56,10 +68,16 @@ public class ScriptVersionService {
     private final Audits audits;
     private final TransactionTemplate tx;
     private final Clock clock;
+    private final ScriptTestCaseService testCases;
+    private final ScriptBindingRepository bindings;
+    private final ScriptOpsRepository ops;
 
     public ScriptVersionService(ScriptRepository scripts, ScriptVersionRepository versions, ScriptSupport support,
                                 PipelineScriptClient pipeline, RoleChecker roleChecker, Audits audits, TransactionTemplate tx,
-                                Clock clock) {
+                                Clock clock, ScriptTestCaseService testCases, ScriptBindingRepository bindings, ScriptOpsRepository ops) {
+        this.testCases = testCases;
+        this.bindings = bindings;
+        this.ops = ops;
         this.scripts = scripts;
         this.versions = versions;
         this.support = support;
@@ -108,6 +126,8 @@ public class ScriptVersionService {
                         support.write(check), user.userId(), clock.instant());
                 versions.deleteOldArchived(orgId, scriptId, ScriptModels.KEEP_VERSIONS);
             }
+            // 가져오는 공유 모듈(SCR-04.01): 코드의 'module:이름@버전'을 버전에 기록한다(사용처·실행 묶음 moduleRefs)
+            ops.updateModuleRefs(orgId, versionId, support.write(ScriptM5Rules.moduleRefs(checkedCode)));
             audits.record(audits.event(orgId, AUDIT_VERSION_SAVED).actor(user).target("SCRIPT", Long.toString(scriptId))
                     .detail("versionId", Long.toString(versionId)).detail("versionNo", versionNo).detail("staticCheckOk", check.ok())
                     .detail("bytes", checkedCode.getBytes(java.nio.charset.StandardCharsets.UTF_8).length));
@@ -148,7 +168,23 @@ public class ScriptVersionService {
         if (memo.length() < 2) {
             throw ScriptModels.invalid("memo", "Size");
         }
-        return tx.execute(status -> {
+        // 배포 전 확인(API-SCR-05 처리 순서): 정적 검사 → 테스트 케이스 전체 실행(SCR-03.03). 롤백(ARCHIVED)은 검증된 버전이라 건너뛴다
+        ScriptRow current = support.require(orgId, scriptId);
+        VersionRow candidate = versions.findById(orgId, scriptId, versionId)
+                .orElseThrow(() -> new BusinessException(ScriptErrorCode.SCRIPT_NOT_FOUND));
+        Map<String, Object> checked;
+        if (VersionStatus.DRAFT.name().equals(candidate.status())) {
+            if (!support.staticCheck(candidate.staticCheck()).ok()) {
+                throw new BusinessException(ScriptErrorCode.SCRIPT_STATIC_CHECK_FAILED);
+            }
+            checked = testCases.guardDeploy(orgId, scriptId, current.kind(), candidate.code(), force);
+        } else {
+            checked = new LinkedHashMap<>();
+            checked.put("passed", 0);
+            checked.put("failed", 0);
+        }
+        Map<String, Object> testResult = checked;
+        DeployResponse response = tx.execute(status -> {
             ScriptRow script = support.lock(orgId, scriptId);
             if (!Objects.equals(baseActive, script.activeVersionId())) {
                 throw new BusinessException(ScriptErrorCode.SCRIPT_VERSION_CONFLICT);
@@ -162,10 +198,10 @@ public class ScriptVersionService {
             if (from == VersionStatus.DRAFT && !support.staticCheck(target.staticCheck()).ok()) {
                 throw new BusinessException(ScriptErrorCode.SCRIPT_STATIC_CHECK_FAILED);
             }
-            // 테스트 케이스(SCR-03.03, M5)가 생기면 여기서 API-SCR-11로 모두 실행하고 실패 시 SCRIPT_TEST_FAILED(force면 통과)
-            Map<String, Object> testResult = new LinkedHashMap<>();
-            testResult.put("passed", 0);
-            testResult.put("failed", 0);
+            if (target.code() != null && !target.code().equals(candidate.code())) {
+                // 테스트한 뒤 다른 사용자가 DRAFT를 고쳤다
+                throw new BusinessException(ScriptErrorCode.SCRIPT_VERSION_CONFLICT);
+            }
             VersionRow previous = script.activeVersionId() == null ? null
                     : versions.findById(orgId, scriptId, script.activeVersionId()).orElse(null);
             versions.archiveActive(orgId, scriptId, clock.instant());
@@ -186,7 +222,55 @@ public class ScriptVersionService {
                 detail.put("rollback", rollback);
             }
             audits.record(audits.event(orgId, action).actor(user).target("SCRIPT", Long.toString(scriptId)).detail(detail));
-            return new DeployResponse(Long.toString(versionId), target.versionNo(), support.applied(orgId, versionId), testResult);
+            return new DeployResponse(Long.toString(versionId), target.versionNo(), support.applied(orgId, versionId), testResult,
+                    null);
         });
+        return new DeployResponse(response.activeVersionId(), response.versionNo(), response.applied(), response.testResult(),
+                reprocessSuggestion(orgId, scriptId, current.name(), response.versionNo()));
+    }
+
+    /**
+     * 배포 후 재처리 제안(SCR-03.06, TC-SCR-061): 연결 대상(소스·모델의 기기·기기)과 지난 7일. 그대로 재처리 작업 생성(API-ING-10)
+     * 본문으로 쓸 수 있다. 화면은 배포 완료 토스트의 [지난 데이터 재처리]에서 미리 채운다. 연결이 없으면 빈 목록
+     */
+    ReprocessSuggestion reprocessSuggestion(long orgId, long scriptId, String scriptName, int versionNo) {
+        java.time.Instant to = clock.instant();
+        java.time.Instant from = to.minus(REPROCESS_DEFAULT_PERIOD);
+        String fullMemo = "스크립트 " + scriptName + " v" + versionNo + " 배포 후 재처리";
+        String memo = fullMemo.length() > 200 ? fullMemo.substring(0, 200) : fullMemo;
+        List<ReprocessRequestBody> requests = new ArrayList<>();
+        java.util.Set<Long> sources = new java.util.LinkedHashSet<>();
+        java.util.Set<Long> deviceIds = new java.util.LinkedHashSet<>();
+        for (BindingRow b : bindings.findByScript(orgId, scriptId)) {
+            if (!b.enabled()) {
+                continue;
+            }
+            switch (b.targetType()) {
+                case "SOURCE" -> {
+                    if (b.targetId().matches("\\d{1,18}")) {
+                        sources.add(Long.valueOf(b.targetId()));
+                    }
+                }
+                case "DEVICE" -> {
+                    if (b.targetId().matches("\\d{1,18}")) {
+                        deviceIds.add(Long.valueOf(b.targetId()));
+                    }
+                }
+                case "MODEL" -> deviceIds.addAll(ops.findDeviceIdsByModelCode(orgId, b.targetId(), REPROCESS_MAX_DEVICES));
+                default -> {
+                }
+            }
+        }
+        sources.forEach(source -> requests.add(new ReprocessRequestBody(source, null, from, to, memo)));
+        // 재처리는 소스 단위(API-ING-10 sourceId 필수): 기기 연결은 소스마다 묶는다. 소스 전체를 재처리하면 그 소스 기기는 뺀다
+        java.util.Map<Long, List<Long>> bySource = new java.util.LinkedHashMap<>();
+        ops.findDeviceSources(orgId, deviceIds).forEach((device, source) -> {
+            if (!sources.contains(source)) {
+                bySource.computeIfAbsent(source, k -> new ArrayList<>()).add(device);
+            }
+        });
+        bySource.forEach((source, devices) -> requests.add(new ReprocessRequestBody(source,
+                devices.stream().limit(REPROCESS_MAX_DEVICES).toList(), from, to, memo)));
+        return new ReprocessSuggestion(from, to, requests);
     }
 }

@@ -75,10 +75,12 @@ public class ScriptService {
     private final Audits audits;
     private final TransactionTemplate tx;
     private final Clock clock;
+    private final ScriptTestCaseService testCases;
 
     public ScriptService(ScriptRepository scripts, ScriptVersionRepository versions, ScriptBindingRepository bindings,
                          ScriptBindingService bindingService, ScriptSupport support, RoleChecker roleChecker, Audits audits,
-                         TransactionTemplate tx, Clock clock) {
+                         TransactionTemplate tx, Clock clock, ScriptTestCaseService testCases) {
+        this.testCases = testCases;
         this.scripts = scripts;
         this.versions = versions;
         this.bindings = bindings;
@@ -226,7 +228,7 @@ public class ScriptService {
                 .detail("name", script.name()).detail("kind", script.kind()));
     }
 
-    /** API-SCR-04 상세. include=versions,usage,tests,config(tests는 M5 테스트 케이스라 무시) */
+    /** API-SCR-04 상세. include=versions,usage,tests,config(tests = 테스트 케이스 SCR-03.03) */
     @Transactional(readOnly = true)
     public ScriptDetailResponse detail(long scriptId, String include) {
         roleChecker.require(Permission.SCRIPT_READ);
@@ -256,7 +258,8 @@ public class ScriptService {
         return new ScriptDetailResponse(Long.toString(s.id()), s.name(), s.kind(), s.description(), s.status(),
                 ScriptSupport.id(s.activeVersionId()), draft == null ? null : Long.toString(draft.id()), s.autoDisabledAt(),
                 s.autoDisabledReason(), config, s.logCaptureUntil(), s.version(), s.updatedByName(), s.updatedAt(), s.createdAt(),
-                activeVersion, draftView, versionList, rows.stream().map(ScriptBindingService::toResponse).toList(), usage);
+                activeVersion, draftView, versionList, rows.stream().map(ScriptBindingService::toResponse).toList(), usage,
+                includes.contains("tests") ? testCases.listForDetail(orgId, scriptId) : null);
     }
 
     private VersionSummary summary(VersionRow v) {

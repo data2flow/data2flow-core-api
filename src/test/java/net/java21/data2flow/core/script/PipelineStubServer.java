@@ -37,7 +37,44 @@ final class PipelineStubServer {
                 "{\"ok\":true,\"output\":{\"metrics\":[{\"key\":\"dew_point\",\"value\":9.4}]},"
                         + "\"diff\":{\"added\":[{\"key\":\"dew_point\",\"value\":9.4}],\"removed\":[],\"changed\":[]},"
                         + "\"logs\":[{\"at\":\"2026-10-03T00:00:00Z\",\"message\":\"x 3\"}],\"durationMs\":0.4,\"outputBytes\":42}"));
+        server.createContext("/internal/pipeline/", this::generic);
         server.start();
+    }
+
+    /** M5 내부 API 대역(API-SCR-35~38, API-ING-23 등): (메서드, 경로 정규식) → 상태·response JSON. 나중에 정한 규칙이 먼저 */
+    record Route(String method, Pattern path, int status, String responseJson) {
+    }
+
+    private final List<Route> routes = new CopyOnWriteArrayList<>();
+
+    void on(String method, String pathRegex, int status, String responseJson) {
+        routes.addFirst(new Route(method, Pattern.compile(pathRegex), status, responseJson));
+    }
+
+    private void generic(HttpExchange exchange) throws IOException {
+        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        String path = exchange.getRequestURI().getPath();
+        String query = exchange.getRequestURI().getRawQuery();
+        received.add(new Received(path + (query == null ? "" : "?" + query), body,
+                exchange.getRequestHeaders().getFirst("X-CALLER-SERVICE")));
+        Route route = routes.stream().filter(r -> r.method().equals(exchange.getRequestMethod()) && r.path().matcher(path).matches())
+                .findFirst().orElse(null);
+        int status = down.get() ? 503 : route == null ? 404 : route.status();
+        String out = status >= 400
+                ? "{\"header\":{\"isSuccessful\":false,\"resultCode\":\"" + (route == null ? "RESOURCE_NOT_FOUND" : route.responseJson())
+                  + "\",\"resultMessage\":\"x\"}}"
+                : "{\"header\":{\"isSuccessful\":true,\"resultCode\":\"SUCCESS\",\"resultMessage\":\"\"},\"response\":"
+                  + route.responseJson() + "}";
+        byte[] bytes = out.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().add("Content-Type", "application/json");
+        exchange.sendResponseHeaders(status, bytes.length);
+        exchange.getResponseBody().write(bytes);
+        exchange.close();
+    }
+
+    /** 경로(쿼리 포함)가 이 문자열을 포함하는 요청 */
+    List<Received> receivedContaining(String part) {
+        return received.stream().filter(r -> r.path().contains(part)).toList();
     }
 
     String baseUrl() {
@@ -50,6 +87,7 @@ final class PipelineStubServer {
 
     void reset() {
         received.clear();
+        routes.clear();
         down.set(false);
     }
 

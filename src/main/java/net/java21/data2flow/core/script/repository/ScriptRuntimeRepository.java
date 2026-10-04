@@ -42,7 +42,7 @@ public class ScriptRuntimeRepository {
     public List<RuntimeScriptRow> listRuntimeScripts(Long organizationId, Long restriction) {
         return jdbc.sql("""
                         SELECT s.id, s.organization_id, s.kind, s.config::text AS config, v.id AS version_id, v.version_no, v.code,
-                               v.code_sha256, v.module_refs::text AS module_refs
+                               v.code_sha256, v.module_refs::text AS module_refs, s.config_revision, s.log_capture_until
                           FROM data2flow_core.scripts s
                           JOIN data2flow_core.script_versions v ON v.id = s.active_version_id AND v.status = 'ACTIVE'
                          WHERE s.status = 'ENABLED'
@@ -57,7 +57,13 @@ public class ScriptRuntimeRepository {
     @OrganizationScopeExempt("조직 전체 실행 묶음(API-SCR-32). 배포 조직(restriction)으로 좁힌다")
     public List<RuntimeBindingRow> listRuntimeBindings(Long organizationId, Long restriction) {
         return jdbc.sql("""
-                        SELECT b.script_id, b.target_type, b.target_id, b.failure_policy, b.enabled
+                        SELECT b.script_id, b.target_type,
+                               -- MODEL 연결은 모델 코드로 저장하지만 실행 엔진은 숫자 모델 ID로 맞춘다(pipeline RuntimeBundle.Binding)
+                               CASE WHEN b.target_type = 'MODEL'
+                                    THEN coalesce((SELECT m.id::text FROM data2flow_core.device_models m
+                                                    WHERE m.organization_id = s.organization_id AND m.code = b.target_id), b.target_id)
+                                    ELSE b.target_id END AS target_id,
+                               b.failure_policy, b.enabled
                           FROM data2flow_core.script_bindings b
                           JOIN data2flow_core.scripts s ON s.id = b.script_id
                          WHERE s.status = 'ENABLED' AND s.active_version_id IS NOT NULL
@@ -108,11 +114,11 @@ public class ScriptRuntimeRepository {
     private static RuntimeScriptRow mapScript(ResultSet rs, int n) throws SQLException {
         return new RuntimeScriptRow(rs.getLong("id"), rs.getLong("organization_id"), rs.getString("kind"), rs.getString("config"),
                 rs.getLong("version_id"), rs.getInt("version_no"), rs.getString("code"), rs.getString("code_sha256"),
-                rs.getString("module_refs"));
+                rs.getString("module_refs"), rs.getInt("config_revision"), Pg.instant(rs, "log_capture_until"));
     }
 
     public record RuntimeScriptRow(long scriptId, long organizationId, String kind, String config, long versionId, int versionNo,
-                                   String code, String codeSha256, String moduleRefs) {
+                                   String code, String codeSha256, String moduleRefs, int configRevision, Instant logCaptureUntil) {
     }
 
     public record RuntimeBindingRow(long scriptId, String targetType, String targetId, String failurePolicy, boolean enabled) {
