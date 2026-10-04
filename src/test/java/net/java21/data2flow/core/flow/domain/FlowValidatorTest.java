@@ -77,7 +77,8 @@ class FlowValidatorTest {
                 + "{\"id\":\"n-x\",\"type\":\"teleport.now\"}", "{\"from\":\"n-trg\",\"to\":\"n-thr\"},{\"from\":\"n-thr\",\"port\":\"true\",\"to\":\"n-x\"}");
         var result = VALIDATOR.validate(JSON.readTree(d), "FLOW", TARGETS);
         assertThat(result.errors()).filteredOn(i -> "n-thr".equals(i.nodeId())).extracting(Issue::field)
-                .contains("nodes[n-thr].config.op", "nodes[n-thr].config.for");
+                .contains("nodes[n-thr].config.op");
+        // 지속 시간 형식(PT5M·5m)은 엔진 레지스트리 스키마에 pattern이 없어 엔진 검증(API-FLW-84)이 판정한다(ADR-051)
         assertThat(result.errors()).filteredOn(i -> "n-x".equals(i.nodeId())).extracting(Issue::code).containsExactly("UNKNOWN_NODE_TYPE");
         assertThat(VALIDATOR.validate(JSON.readTree("[]"), "FLOW", TARGETS).errors()).extracting(Issue::field).containsExactly("definition");
         assertThat(VALIDATOR.validate(JSON.readTree("{\"schema\":\"x\",\"nodes\":[]}"), "FLOW", TARGETS).errors())
