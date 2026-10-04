@@ -305,3 +305,53 @@ COMMENT ON TABLE data_gaps IS '수신 공백. 예상 주기의 3배 이상(BR-IN
 
 -- 다음 파일에 영향을 주지 않도록 검색 경로를 되돌린다.
 RESET search_path;
+
+-- M5 fork A: pipeline M5 확장 중 core가 읽는 것(data2flow-pipeline V202610050000__pipeline_m5.sql 그대로, IF NOT EXISTS)
+ALTER TABLE data2flow_pipeline.partition_registries ADD COLUMN IF NOT EXISTS sorted_at timestamptz;
+ALTER TABLE data2flow_pipeline.partition_registries ADD COLUMN IF NOT EXISTS archive_bytes bigint;
+ALTER TABLE data2flow_pipeline.partition_registries ADD COLUMN IF NOT EXISTS archive_ratio numeric(8,4);
+CREATE TABLE IF NOT EXISTS data2flow_pipeline.script_errors (
+    id               bigint GENERATED ALWAYS AS IDENTITY,
+    organization_id  bigint        NOT NULL,
+    script_id        bigint        NOT NULL,
+    version_id       bigint        NOT NULL,
+    version_no       integer       NOT NULL,
+    occurred_at      timestamptz   NOT NULL,
+    error_code       varchar(32)   NOT NULL,
+    message          varchar(500)  NOT NULL,
+    line             integer,
+    col              integer,
+    stack            varchar(2048),
+    input_snapshot   jsonb,
+    device_id        bigint,
+    raw_message_id   bigint,
+    CONSTRAINT pk_script_errors PRIMARY KEY (id)
+);
+CREATE INDEX IF NOT EXISTS ix_script_errors_script_occurred ON data2flow_pipeline.script_errors (script_id, occurred_at DESC, id DESC);
+CREATE TABLE IF NOT EXISTS data2flow_pipeline.script_stats_1m (
+    script_id        bigint            NOT NULL,
+    version_id       bigint            NOT NULL,
+    minute           timestamptz       NOT NULL,
+    organization_id  bigint            NOT NULL,
+    version_no       integer           NOT NULL,
+    processed        integer           NOT NULL,
+    errors           integer           NOT NULL,
+    timeouts         integer           NOT NULL,
+    avg_ms           double precision  NOT NULL,
+    p95_ms           double precision  NOT NULL,
+    max_ms           double precision  NOT NULL,
+    max_input_bytes  integer           NOT NULL DEFAULT 0,
+    logs_dropped     integer           NOT NULL DEFAULT 0,
+    CONSTRAINT pk_script_stats_1m PRIMARY KEY (script_id, version_id, minute)
+);
+CREATE TABLE IF NOT EXISTS data2flow_pipeline.script_logs (
+    id               bigint GENERATED ALWAYS AS IDENTITY,
+    organization_id  bigint         NOT NULL,
+    script_id        bigint         NOT NULL,
+    version_no       integer        NOT NULL,
+    at               timestamptz    NOT NULL,
+    device_id        bigint,
+    message          varchar(1100)  NOT NULL,
+    CONSTRAINT pk_script_logs PRIMARY KEY (id)
+);
+CREATE INDEX IF NOT EXISTS ix_script_logs_script_at ON data2flow_pipeline.script_logs (script_id, at DESC);
