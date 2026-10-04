@@ -9,7 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.context.TestPropertySource;
+import org.junit.jupiter.api.AfterEach;
 
 import java.time.Duration;
 import java.util.List;
@@ -22,7 +22,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** DSC-07.02 무중단 자격증명 교체(BR-DSC-09)·DSC-07.05 복제 — TC-DSC-172·173·190·191 */
-@TestPropertySource(properties = "data2flow.core.source.zero-downtime-rotation=true")
 class SourceLifecycleIT extends SourceItSupport {
 
     @Autowired
@@ -30,8 +29,14 @@ class SourceLifecycleIT extends SourceItSupport {
 
     long source;
 
+    @AfterEach
+    void rotationOff() {
+        rotations.enabled(false);
+    }
+
     @BeforeEach
     void activeSource() throws Exception {
+        rotations.enabled(true);
         source = createSource(mqttBody("rot-src", "\"activate\":true"));
         for (String instance : List.of("ingress-0", "ingress-1")) {
             jdbc.sql("""

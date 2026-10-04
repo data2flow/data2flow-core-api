@@ -67,7 +67,7 @@ public class SourceRotationService {
     private final Audits audits;
     private final JsonMapper json;
     private final Clock clock;
-    private final boolean enabled;
+    private volatile boolean enabled;
 
     public SourceRotationService(SourceRotationRepository rotations, DataSourceRepository sources, SourceHealthRepository health,
                                  SourceSecrets secrets, SourceStateService states, RoleChecker roleChecker, Audits audits, JsonMapper json,
@@ -82,6 +82,11 @@ public class SourceRotationService {
         this.json = json;
         this.clock = clock;
         this.enabled = enabled;
+    }
+
+    /** 무중단 교체를 켜고 끈다(설정값의 런타임 대체. 통합 시험이 Spring 컨텍스트를 하나 더 만들지 않으려고 쓴다) */
+    public void enabled(boolean value) {
+        this.enabled = value;
     }
 
     /** 교체 결과 */
