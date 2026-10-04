@@ -19,6 +19,12 @@ public class FailureWithResponse extends BusinessException {
         this.response = response;
     }
 
+    /** 문구 인자가 있는 경우(예: EXPORT_TARGET_UNWRITABLE "{0}" 원인) */
+    public FailureWithResponse(ErrorCode code, List<FieldErrorDetail> errors, Object response, Object... args) {
+        super(code, errors, args);
+        this.response = response;
+    }
+
     public Object response() {
         return response;
     }
