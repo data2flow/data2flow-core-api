@@ -90,6 +90,12 @@ public class IngestSettingsService {
         return new AlertSettings(ingest.lagWarnSec(), ingest.lagCriticalSec(), zero.enabled(), zero.value(), dlq.enabled(), dlq.value());
     }
 
+    /** 운영 알람 기준 하나(권한 검사 없음, 서비스 내부용. 저장 전이면 기본값). 예: DISK_FREE_PERCENT(OPS-01.03) */
+    @Transactional(readOnly = true)
+    public OpsThresholdRow opsThreshold(long orgId, String key) {
+        return currentOps(orgId).get(key);
+    }
+
     // ---------------------------------------------------------------- API-ING-04
 
     /** API-ING-04 조회(문서에 없던 GET, 웹 수집 모니터의 기준 편집 폼이 쓴다). 저장 전이면 기본값·version 0 */

@@ -12,6 +12,8 @@ import net.java21.data2flow.core.dashboard.dto.DashboardDtos.ItemRef;
 import net.java21.data2flow.core.dashboard.dto.DashboardDtos.PreferencesResponse;
 import net.java21.data2flow.core.dashboard.dto.DashboardDtos.RecentRequest;
 import net.java21.data2flow.core.dashboard.dto.DashboardDtos.RecentResponse;
+import net.java21.data2flow.core.board.domain.BoardErrorCode;
+import net.java21.data2flow.core.board.repository.DashboardBoardRepository;
 import net.java21.data2flow.core.dashboard.repository.PreferencesRepository;
 import net.java21.data2flow.core.dashboard.repository.PreferencesRepository.OrgDefaults;
 import net.java21.data2flow.core.dashboard.repository.PreferencesRepository.PrefsRow;
@@ -59,12 +61,15 @@ public class PreferencesService {
 
     private final RoleChecker roleChecker;
     private final PreferencesRepository repository;
+    private final DashboardBoardRepository dashboards;
     private final JsonMapper json;
     private final Clock clock;
 
-    public PreferencesService(RoleChecker roleChecker, PreferencesRepository repository, JsonMapper json, Clock clock) {
+    public PreferencesService(RoleChecker roleChecker, PreferencesRepository repository, DashboardBoardRepository dashboards, JsonMapper json,
+                              Clock clock) {
         this.roleChecker = roleChecker;
         this.repository = repository;
+        this.dashboards = dashboards;
         this.json = json;
         this.clock = clock;
     }
@@ -96,6 +101,11 @@ public class PreferencesService {
         List<String> tours = body.has("toursDismissed") ? tours(body.get("toursDismissed"), errors) : current.toursDismissed();
         if (!errors.isEmpty()) {
             throw new BusinessException(CommonErrorCode.INVALID_REQUEST, errors);
+        }
+        // 기본 대시보드는 보이는 대시보드만(DSH-04.07, M5)
+        if (dashboard != null && !dashboard.equals(current.defaultDashboardId())
+                && dashboards.findVisibleNames(user.organizationId(), user.userId(), List.of(dashboard)).isEmpty()) {
+            throw new BusinessException(BoardErrorCode.DASHBOARD_NOT_FOUND);
         }
         Instant now = clock.instant();
         if (stored.isEmpty()) {
@@ -174,6 +184,7 @@ public class PreferencesService {
         List<JsonNode> items = new ArrayList<>();
         Set<Long> spaces = new HashSet<>();
         Set<Long> devices = new HashSet<>();
+        Set<Long> boards = new HashSet<>();
         for (JsonNode item : json.readTree(stored).values()) {
             String id = item.path("id").asString("");
             if (!id.matches("\\d{1,18}")) {
@@ -185,17 +196,21 @@ public class PreferencesService {
                 spaces.add(Long.parseLong(id));
             } else if ("DEVICE".equals(type)) {
                 devices.add(Long.parseLong(id));
+            } else if ("DASHBOARD".equals(type)) {
+                boards.add(Long.parseLong(id));
             }
         }
         Map<Long, String> spaceNames = repository.findSpaceNames(user.organizationId(), spaces, scope);
         Map<Long, String> deviceNames = repository.findDeviceNames(user.organizationId(), devices, scope);
+        Map<Long, String> boardNames = dashboards.findVisibleNames(user.organizationId(), user.userId(), boards);
         List<ItemRef> result = new ArrayList<>();
         for (JsonNode item : items) {
             String type = item.path("type").asString("");
             long id = Long.parseLong(item.path("id").asString());
             String name = null;
-            if ("SPACE".equals(type) || "DEVICE".equals(type)) {
-                name = ("SPACE".equals(type) ? spaceNames : deviceNames).get(id);
+            if ("SPACE".equals(type) || "DEVICE".equals(type) || "DASHBOARD".equals(type)) {
+                // 공간·기기는 범위 밖·삭제면, 대시보드는 안 보이거나 지웠으면 뺀다(M5부터 대시보드 이름을 채운다)
+                name = ("SPACE".equals(type) ? spaceNames : "DEVICE".equals(type) ? deviceNames : boardNames).get(id);
                 if (name == null) {
                     continue;
                 }

@@ -303,5 +303,17 @@ CREATE INDEX ix_data_gaps_device_start ON data_gaps (device_id, gap_start DESC);
 CREATE INDEX ix_data_gaps_org_start ON data_gaps (organization_id, gap_start DESC);
 COMMENT ON TABLE data_gaps IS '수신 공백. 예상 주기의 3배 이상(BR-ING-17)';
 
+-- M5 fork E: pipeline V202610050000__pipeline_m5.sql 중 core가 읽는 열(재처리 작업 목록 API-ING-14, 기기 시간대·시계 오차)
+ALTER TABLE reprocess_jobs ADD COLUMN IF NOT EXISTS only_failed boolean NOT NULL DEFAULT false;
+ALTER TABLE reprocess_jobs ADD COLUMN IF NOT EXISTS skipped bigint NOT NULL DEFAULT 0;
+ALTER TABLE reprocess_jobs ADD COLUMN IF NOT EXISTS last_raw_id bigint NOT NULL DEFAULT 0;
+ALTER TABLE reprocess_jobs ADD COLUMN IF NOT EXISTS owner_instance varchar(64);
+ALTER TABLE reprocess_jobs ADD COLUMN IF NOT EXISTS heartbeat_at timestamptz;
+ALTER TABLE reprocess_jobs ADD COLUMN IF NOT EXISTS pinned_bundle jsonb;
+ALTER TABLE reprocess_jobs ADD COLUMN IF NOT EXISTS error varchar(500);
+ALTER TABLE device_state ADD COLUMN IF NOT EXISTS timezone varchar(64);
+ALTER TABLE device_state ADD COLUMN IF NOT EXISTS clock_skew_since timestamptz;
+ALTER TABLE device_state ADD COLUMN IF NOT EXISTS clock_skew_suspected boolean NOT NULL DEFAULT false;
+
 -- 다음 파일에 영향을 주지 않도록 검색 경로를 되돌린다.
 RESET search_path;

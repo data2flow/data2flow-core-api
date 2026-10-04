@@ -66,8 +66,8 @@ class PreferencesIT extends IntegrationTestSupport {
     void saveAndConflict() throws Exception {
         mvc.perform(as(org, user, json(put("/core/accounts/me/preferences"), """
                         {"theme":"dark","timeZone":"Asia/Tokyo","temperatureUnit":"F","locale":"JA",
-                         "favorites":[{"type":"SPACE","id":"%d"},{"type":"DEVICE","id":%d},{"type":"DASHBOARD","id":"5"},{"type":"SPACE","id":"%d"}],
-                         "toursDismissed":["home"],"baseVersion":0}""".formatted(lab, device, lab))))
+                         "favorites":[{"type":"SPACE","id":"%d"},{"type":"DEVICE","id":%d},{"type":"DASHBOARD","id":"%d"},{"type":"SPACE","id":"%d"}],
+                         "toursDismissed":["home"],"baseVersion":0}""".formatted(lab, device, dashboard("운영 현황"), lab))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.response.theme").value("DARK"))
                 .andExpect(jsonPath("$.response.timeZone").value("Asia/Tokyo"))
@@ -77,6 +77,8 @@ class PreferencesIT extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.response.favorites[*].type").value(contains("SPACE", "DEVICE", "DASHBOARD")))
                 .andExpect(jsonPath("$.response.favorites[0].name").value("실습실"))
                 .andExpect(jsonPath("$.response.favorites[1].name").value("기기 a1"))
+                // M5(DSH-04.07): 대시보드 즐겨찾기도 이름을 채운다
+                .andExpect(jsonPath("$.response.favorites[2].name").value("운영 현황"))
                 .andExpect(jsonPath("$.response.toursDismissed[0]").value("home"))
                 .andExpect(jsonPath("$.response.version").value(1));
         // 온 키만: 테마만 바꾸면 즐겨찾기·시간대는 그대로
@@ -119,18 +121,26 @@ class PreferencesIT extends IntegrationTestSupport {
         mvc.perform(as(org, user, json(put("/core/accounts/me/preferences"), "{\"favorites\":" + many + "],\"baseVersion\":0}")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].field").value("favorites"));
+        // M5(DSH-04.07): 기본 대시보드는 보이는 대시보드만
         mvc.perform(as(org, user, json(put("/core/accounts/me/preferences"),
-                        "{\"defaultDashboardId\":\"12\",\"home\":\"dashboard\",\"favorites\":null,\"toursDismissed\":null,\"baseVersion\":0}")))
+                        "{\"defaultDashboardId\":\"999999\",\"baseVersion\":0}")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.header.resultCode").value("DASHBOARD_NOT_FOUND"));
+        long board = dashboard("기본");
+        mvc.perform(as(org, user, json(put("/core/accounts/me/preferences"),
+                        "{\"defaultDashboardId\":\"" + board + "\",\"home\":\"dashboard\",\"favorites\":null,\"toursDismissed\":null,\"baseVersion\":0}")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.response.defaultDashboardId").value("12"))
+                .andExpect(jsonPath("$.response.defaultDashboardId").value(Long.toString(board)))
                 .andExpect(jsonPath("$.response.home").value("DASHBOARD"));
     }
 
     @Test
     @DisplayName("[DSH-07.05] 최근 본 항목: 20건 유지, 다시 보면 맨 앞, 권한이 사라진 항목은 조회에서 제외 — TC-DSH-079")
     void recentAndScope() throws Exception {
+        long[] boards = new long[22];
         for (int i = 1; i <= 21; i++) {
-            mvc.perform(as(org, user, json(post("/core/accounts/me/recent"), "{\"type\":\"DASHBOARD\",\"id\":\"" + i + "\"}")))
+            boards[i] = dashboard("대시보드 " + i);
+            mvc.perform(as(org, user, json(post("/core/accounts/me/recent"), "{\"type\":\"DASHBOARD\",\"id\":\"" + boards[i] + "\"}")))
                     .andExpect(status().isOk());
         }
         mvc.perform(as(org, user, json(post("/core/accounts/me/recent"), "{\"type\":\"space\",\"id\":\"" + lab + "\"}")))
@@ -139,12 +149,13 @@ class PreferencesIT extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.response.recent[0].type").value("SPACE"))
                 .andExpect(jsonPath("$.response.recent[0].name").value("실습실"))
                 .andExpect(jsonPath("$.response.recent[0].at", endsWith("Z")))
-                .andExpect(jsonPath("$.response.recent[1].id").value("21"))
-                .andExpect(jsonPath("$.response.recent[19].id").value("3"));
-        mvc.perform(as(org, user, json(post("/core/accounts/me/recent"), "{\"type\":\"DASHBOARD\",\"id\":\"10\"}")))
-                .andExpect(jsonPath("$.response.recent[0].id").value("10"))
+                .andExpect(jsonPath("$.response.recent[1].id").value(Long.toString(boards[21])))
+                .andExpect(jsonPath("$.response.recent[19].id").value(Long.toString(boards[3])));
+        mvc.perform(as(org, user, json(post("/core/accounts/me/recent"), "{\"type\":\"DASHBOARD\",\"id\":\"" + boards[10] + "\"}")))
+                .andExpect(jsonPath("$.response.recent[0].id").value(Long.toString(boards[10])))
+                .andExpect(jsonPath("$.response.recent[0].name").value("대시보드 10"))
                 .andExpect(jsonPath("$.response.recent", hasSize(20)))
-                .andExpect(jsonPath("$.response.recent[?(@.id == '10')]", hasSize(1)));
+                .andExpect(jsonPath("$.response.recent[?(@.id == '" + boards[10] + "')]", hasSize(1)));
         mvc.perform(as(org, user, json(put("/core/accounts/me/preferences"),
                         "{\"favorites\":[{\"type\":\"SPACE\",\"id\":\"" + lab + "\"},{\"type\":\"SPACE\",\"id\":\"" + classroom + "\"},"
                                 + "{\"type\":\"DEVICE\",\"id\":\"" + device + "\"}],\"baseVersion\":0}")))
@@ -165,5 +176,13 @@ class PreferencesIT extends IntegrationTestSupport {
         mvc.perform(as(org, user, json(post("/core/accounts/me/recent"), "{\"type\":\"WIDGET\",\"id\":\"x\"}")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[*].field").value(contains("type", "id")));
+    }
+
+    /** 조직 공개(ORG) 대시보드(M5, DSH-04.07) */
+    private long dashboard(String name) {
+        return jdbc.sql("""
+                        INSERT INTO data2flow_core.dashboards (organization_id, name, visibility, owner_user_id)
+                        VALUES (:org, :name, 'ORG', :user) RETURNING id""")
+                .param("org", org).param("name", name).param("user", user).query(Long.class).single();
     }
 }

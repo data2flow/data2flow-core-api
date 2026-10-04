@@ -1,5 +1,9 @@
 package net.java21.data2flow.core.mail.service;
 
+import net.java21.data2flow.core.branding.dto.BrandingDtos.MailBranding;
+import net.java21.data2flow.core.branding.service.BrandingService;
+import org.springframework.beans.factory.ObjectProvider;
+
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import net.java21.data2flow.contracts.secret.Secret;
@@ -36,12 +40,15 @@ public class MailService {
     private final SecretCipher cipher;
     private final MessageSource messages;
     private final JsonMapper json;
+    private final ObjectProvider<BrandingService> branding;
 
-    public MailService(ExternalServiceRepository configs, SecretCipher cipher, MessageSource messages, JsonMapper json) {
+    public MailService(ExternalServiceRepository configs, SecretCipher cipher, MessageSource messages, JsonMapper json,
+                       ObjectProvider<BrandingService> branding) {
         this.configs = configs;
         this.cipher = cipher;
         this.messages = messages;
         this.json = json;
+        this.branding = branding;
     }
 
     /**
@@ -59,11 +66,17 @@ public class MailService {
         JavaMailSenderImpl sender = sender(settings, password);
         String subject = messages.getMessage(template + ".subject", args, locale);
         String body = messages.getMessage(template + ".body", args, locale);
+        // 브랜딩(DSH-13.01): 발신 이름·서명이 있으면 메일에 적용한다
+        BrandingService brandingService = branding.getIfAvailable();
+        MailBranding mailBranding = brandingService == null ? null : brandingService.mailBranding(organizationId).orElse(null);
+        if (mailBranding != null && mailBranding.signature() != null) {
+            body = body + "\n\n-- \n" + mailBranding.signature();
+        }
         try {
             MimeMessage message = sender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, false, StandardCharsets.UTF_8.name());
             String from = String.valueOf(settings.getOrDefault("from", "no-reply@data2flow.java21.net"));
-            Object fromName = settings.get("fromName");
+            Object fromName = mailBranding != null && mailBranding.senderName() != null ? mailBranding.senderName() : settings.get("fromName");
             if (fromName == null) {
                 helper.setFrom(from);
             } else {
