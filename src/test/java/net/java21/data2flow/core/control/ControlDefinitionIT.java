@@ -79,6 +79,9 @@ class ControlDefinitionIT extends LoopItSupport {
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.response.hasSecret").value(true))
                 .andExpect(jsonPath("$.response.status").value("UNTESTED")).andReturn();
         assertThat(body(created)).doesNotContain("thinq-secret-token");
+        // 기본 서킷 설정은 action이 읽는 단위(%) 그대로: {failureRate:50, windowSec:60, openSec:30}(ACT domain-model, BR-ACT-14)
+        assertThat(jdbc.sql("SELECT circuit ->> 'failureRate' FROM data2flow_core.drivers WHERE name = 'LG 에어컨'").query(String.class).single())
+                .isEqualTo("50");
         long lg = Long.parseLong(read(created, "$.response.driverId"));
         mvc.perform(as(org, operator, get("/core/drivers"))).andExpect(status().isForbidden());
         mvc.perform(as(org, integrator, json(post("/core/drivers"), "{\"name\":\"x\",\"type\":\"FTP\"}")))
