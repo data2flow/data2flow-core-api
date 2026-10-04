@@ -121,6 +121,14 @@ public class AlarmRepository {
      *
      * @param lowerIsWorse 낮을수록 나쁜 조건(&lt;, &lt;=)이면 최솟값을 최고값으로 본다
      */
+    /** 열린 알람 심각도 바꾸기(같은 알람을 승격, 예: 디스크 여유 MAJOR → CRITICAL, BR-OPS-03). 바뀐 행 수 */
+    public int updateSeverity(long organizationId, long id, String severity, Instant at) {
+        return jdbc.sql("""
+                        UPDATE data2flow_core.alarms SET severity = :severity, version = version + 1, updated_at = :at
+                         WHERE organization_id = :org AND id = :id AND status <> 'CLEARED' AND severity <> :severity""")
+                .param("severity", severity).param("at", Pg.ts(at)).param("org", organizationId).param("id", id).update();
+    }
+
     public void updateReraised(long organizationId, long id, Double value, boolean lowerIsWorse, Instant at) {
         jdbc.sql("""
                         UPDATE data2flow_core.alarms SET occurrence_count = occurrence_count + 1, last_value = coalesce(:value, last_value),
