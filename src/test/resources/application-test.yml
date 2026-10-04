@@ -17,6 +17,12 @@ data2flow:
       relay-enabled: false
     jobs:
       enabled: false
+    # M5 내보내기·가져오기·정기 내보내기: 주기 작업은 끄고 테스트가 직접 부른다. 캐시는 캐시 IT만 켠다(Redis 컨테이너)
+    exchange:
+      jobs-enabled: false
+      sync-timeout: PT20S
+    telemetry-cache:
+      enabled: false
     # 실시간 화면(WP-F): 텔레메트리 스트림은 스트림 IT만 켜고, 주기 작업은 테스트가 직접 부른다
     live:
       telemetry-enabled: false

@@ -87,4 +87,22 @@ public final class TelemetryDtos {
     /** API-TSD-08 통신 품질 점(게이트웨이별). 게이트웨이 정보가 없으면 gatewayEui null */
     public record LinkQualityResponse(Instant t, String gatewayEui, Double rssi, Double snr) {
     }
+
+    /**
+     * 공간 비교 요청(DSH-02.04, DSH-api {@code POST /api/v1/core/telemetry/compare-spaces}). 공간 1~6곳, 같은 측정 항목.
+     * agg는 공간 집계 함수(avg·min·max·sum, 기본 avg), resolution은 auto·1m·1h·1d.
+     */
+    public record CompareSpacesRequest(List<String> spaceIds, String metricKey, String agg, Instant from, Instant to, String resolution,
+                                       Boolean virtual, String tz) {
+    }
+
+    /** 공간 비교 응답. 계열 순서는 요청 순서, 모든 계열이 같은 집계 단위·같은 구간 시각 */
+    public record CompareSpacesResponse(String metricKey, String unit, String agg, String effectiveResolution, String reason,
+                                        String timezone, List<CompareSpaceSeries> series) {
+    }
+
+    /** 공간 하나의 집계 계열(점 {@code [구간 시작, 값, 기여 기기 수]}) */
+    public record CompareSpaceSeries(String spaceId, String spaceName, int deviceCount, int excludedDeviceCount,
+                                     List<List<Object>> points) {
+    }
 }

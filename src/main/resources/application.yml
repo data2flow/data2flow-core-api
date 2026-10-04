@@ -37,9 +37,21 @@ spring:
       virtual-host: ${DATA2FLOW_RABBITMQ_VHOST:data2flow-dev}
       username: ${DATA2FLOW_RABBITMQ_USERNAME:guest}
       password: ${DATA2FLOW_RABBITMQ_PASSWORD:guest}
+  # 확정된 과거 집계 조회 캐시(TSD-06.04, ADR-022): s4 Redis를 캐시로만. 연결은 처음 쓸 때 맺고, 없어도 기동·조회는 된다
+  data:
+    redis:
+      host: ${DATA2FLOW_REDIS_HOST:localhost}
+      port: ${DATA2FLOW_REDIS_PORT:6379}
+      username: ${DATA2FLOW_REDIS_USERNAME:}
+      password: ${DATA2FLOW_REDIS_PASSWORD:}
+      database: ${DATA2FLOW_REDIS_DATABASE:0}
+      timeout: 500ms
+      connect-timeout: 1s
+      repositories:
+        enabled: false
   messages:
     # 도메인별 문구 묶음(ADR-037: ko 원문, en·ja·zh). 오류 문구 키는 error.<코드>
-    basename: messages,i18n/space,i18n/catalog,i18n/device,i18n/source,i18n/script,i18n/annotation,i18n/telemetry,i18n/live,i18n/control,i18n/flow,i18n/sim,i18n/alarm
+    basename: messages,i18n/space,i18n/catalog,i18n/device,i18n/source,i18n/script,i18n/annotation,i18n/telemetry,i18n/live,i18n/control,i18n/flow,i18n/sim,i18n/alarm,i18n/dataexchange
     encoding: UTF-8
     fallback-to-system-locale: false
 server:
@@ -63,6 +75,9 @@ management:
     rabbit:
       enabled: false
     mail:
+      enabled: false
+    # Redis는 캐시라 없어도 서비스는 정상이다(readiness에 넣지 않음)
+    redis:
       enabled: false
   metrics:
     tags:
@@ -114,3 +129,16 @@ data2flow:
       simulator-base-url: ${DATA2FLOW_SIMULATOR_BASE_URL:http://data2flow-simulator}
       # 시작할 때 ACTIVE 조직마다 SIM 소스·하트비트 기기(__heartbeat__)·가상 드라이버를 보장(멱등)
       seed-on-startup: ${DATA2FLOW_SIM_SEED_ON_STARTUP:true}
+    # 확정된 과거 집계 조회 캐시(TSD-06.04, BR-TSD-20). Redis 주소가 있는 배포에서 켠다
+    telemetry-cache:
+      enabled: ${DATA2FLOW_TELEMETRY_CACHE_ENABLED:false}
+      ttl: PT10M
+    # 내보내기·가져오기·정기 내보내기(TSD-04·07, BR-TSD-14·15·28)
+    exchange:
+      sync-max-rows: 1000000
+      sync-timeout: PT30S
+      max-active-per-user: 3
+      file-retention: P7D
+      link-ttl: PT1H
+      workers: ${DATA2FLOW_EXPORT_WORKERS:2}
+      jobs-enabled: ${DATA2FLOW_EXCHANGE_JOBS_ENABLED:true}

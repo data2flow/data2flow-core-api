@@ -29,6 +29,10 @@
         <bouncycastle.version>1.86</bouncycastle.version>
         <!-- 테스트 SMTP 서버(초대·재설정 메일 검증). Apache-2.0 -->
         <greenmail.version>2.1.14</greenmail.version>
+        <!-- 정기 내보내기 SFTP 전달(TSD-07.02). Apache MINA SSHD, Apache-2.0 -->
+        <sshd.version>2.20.0</sshd.version>
+        <!-- Parquet 내보내기 zstd 압축(TSD-07.02, NFR-04.02). BSD-2-Clause(허용, ADR-018). pipeline과 같은 버전 -->
+        <zstd-jni.version>1.5.7-9</zstd-jni.version>
     </properties>
 
     <!-- data2flow-contracts·data2flow-bom은 GitHub Packages에 있다. 읽기에도 토큰이 필요하다(README 참고) -->
@@ -122,6 +126,22 @@
         <dependency>
             <groupId>commons-codec</groupId>
             <artifactId>commons-codec</artifactId>
+        </dependency>
+
+        <!-- 확정된 과거 집계 조회 캐시(TSD-06.04, BR-TSD-20). s4 Redis를 캐시로만 쓴다(ADR-022). Lettuce MIT/Apache-2.0 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.sshd</groupId>
+            <artifactId>sshd-sftp</artifactId>
+            <version>${sshd.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+            <version>${zstd-jni.version}</version>
         </dependency>
 
         <dependency>

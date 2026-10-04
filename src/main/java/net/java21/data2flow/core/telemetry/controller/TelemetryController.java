@@ -9,6 +9,11 @@ import net.java21.data2flow.core.telemetry.dto.TelemetryDtos.RawPointResponse;
 import net.java21.data2flow.core.telemetry.dto.TelemetryDtos.SeriesResponse;
 import net.java21.data2flow.core.telemetry.dto.TelemetryDtos.SpaceSeriesResponse;
 import net.java21.data2flow.core.telemetry.dto.TelemetryDtos.StateIntervalResponse;
+import jakarta.servlet.http.HttpServletResponse;
+import net.java21.data2flow.core.telemetry.dto.TelemetryDtos.CompareSpacesRequest;
+import net.java21.data2flow.core.telemetry.dto.TelemetryDtos.CompareSpacesResponse;
+import net.java21.data2flow.core.telemetry.service.TelemetryCachedQueries;
+import net.java21.data2flow.core.telemetry.service.TelemetryCachedQueries.Cached;
 import net.java21.data2flow.core.telemetry.service.TelemetryQueryService;
 import net.java21.data2flow.core.telemetry.service.TelemetryQueryService.SeriesQuery;
 import net.java21.data2flow.core.telemetry.service.TelemetryQueryService.SpaceQuery;
@@ -29,10 +34,20 @@ import java.util.List;
 @RestController
 public class TelemetryController {
 
-    private final TelemetryQueryService service;
+    /** 캐시 적중 여부 응답 헤더(TSD-06.04, AT-TSD-13.2) */
+    static final String X_CACHE = "X-Cache";
 
-    public TelemetryController(TelemetryQueryService service) {
+    private final TelemetryQueryService service;
+    private final TelemetryCachedQueries cached;
+
+    public TelemetryController(TelemetryQueryService service, TelemetryCachedQueries cached) {
         this.service = service;
+        this.cached = cached;
+    }
+
+    private static <T> ApiResponse<T> withCache(Cached<T> result, HttpServletResponse response) {
+        response.setHeader(X_CACHE, result.header());
+        return ApiResponse.success(result.value());
     }
 
     /** API-TSD-01 현재값(NFR-01.05) */
@@ -59,9 +74,10 @@ public class TelemetryController {
                                               @RequestParam(name = "includeForecast", required = false) Boolean includeForecast,
                                               @RequestParam(name = "virtual", required = false) Boolean virtual,
                                               @RequestParam(name = "includeVirtual", required = false) Boolean includeVirtual,
-                                              @RequestParam(name = "tz", required = false) String tz) {
-        return ApiResponse.success(service.series(new SeriesQuery(deviceId, metrics, from, to, resolution, agg, fill, quality, includeForecast,
-                virtual != null ? virtual : includeVirtual, tz)));
+                                              @RequestParam(name = "tz", required = false) String tz,
+                                              HttpServletResponse response) {
+        return withCache(cached.series(new SeriesQuery(deviceId, metrics, from, to, resolution, agg, fill, quality, includeForecast,
+                virtual != null ? virtual : includeVirtual, tz)), response);
     }
 
     /** API-TSD-02 원본 점 넘겨 보기(커서 목록, TSD-06.01) */
@@ -92,15 +108,22 @@ public class TelemetryController {
                                                         @RequestParam(name = "tags", required = false) List<String> tags,
                                                         @RequestParam(name = "virtual", required = false) Boolean virtual,
                                                         @RequestParam(name = "includeVirtual", required = false) Boolean includeVirtual,
-                                                        @RequestParam(name = "tz", required = false) String tz) {
-        return ApiResponse.success(service.spaceSeries(new SpaceQuery(spaceId, metric, includeDescendants, func, from, to, resolution, models,
-                tags, virtual != null ? virtual : includeVirtual, tz)));
+                                                        @RequestParam(name = "tz", required = false) String tz,
+                                                        HttpServletResponse response) {
+        return withCache(cached.spaceSeries(new SpaceQuery(spaceId, metric, includeDescendants, func, from, to, resolution, models,
+                tags, virtual != null ? virtual : includeVirtual, tz)), response);
     }
 
     /** API-TSD-04 여러 계열 조회(≤50, TSD-03.03) */
     @PostMapping("/core/telemetry/query")
-    public ApiResponse<SeriesResponse> query(@RequestBody QueryRequest request) {
-        return ApiResponse.success(service.query(request));
+    public ApiResponse<SeriesResponse> query(@RequestBody QueryRequest request, HttpServletResponse response) {
+        return withCache(cached.query(request), response);
+    }
+
+    /** 공간 비교: 공간 1~6곳의 같은 측정 항목(DSH-02.04, TC-DSH-018·019) — TS_READ(VIEWER 이상) */
+    @PostMapping("/core/telemetry/compare-spaces")
+    public ApiResponse<CompareSpacesResponse> compareSpaces(@RequestBody CompareSpacesRequest request, HttpServletResponse response) {
+        return withCache(cached.compareSpaces(request), response);
     }
 
     /** API-TSD-05 상태 구간 */

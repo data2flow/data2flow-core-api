@@ -152,6 +152,18 @@ public class TelemetryQueryRepository {
                 .query((rs, n) -> new Gap(Pg.instant(rs, "gap_start"), Pg.instant(rs, "gap_end"))).list();
     }
 
+    /** 공간 이름(공간 비교 범례, DSH-02.04) */
+    public Map<Long, String> findSpaceNames(long organizationId, java.util.Collection<Long> spaceIds) {
+        Map<Long, String> names = new java.util.HashMap<>();
+        if (spaceIds.isEmpty()) {
+            return names;
+        }
+        jdbc.sql("SELECT id, name FROM data2flow_core.spaces WHERE organization_id = :org AND id = ANY(CAST(:ids AS bigint[]))")
+                .param("org", organizationId).param("ids", Pg.bigintArray(spaceIds))
+                .query((rs, n) -> names.put(rs.getLong("id"), rs.getString("name"))).list();
+        return names;
+    }
+
     /** 공간(ACTIVE)과 사이트 시간대 */
     public Optional<SpaceInfo> findSpace(long organizationId, long spaceId) {
         return jdbc.sql("""

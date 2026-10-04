@@ -22,3 +22,6 @@ data2flow:
     # 공용 DB에 가상 환경 기본값을 쓰지 않는다
     loop:
       seed-on-startup: false
+    # 공용 DB의 내보내기·가져오기·정기 내보내기 작업을 로컬이 대신 실행하지 않는다(M5)
+    exchange:
+      jobs-enabled: false
