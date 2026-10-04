@@ -12,6 +12,9 @@ data2flow:
     master-keys: test1:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
   core:
     flyway-mode: migrate
+    # M5 엣지(DSC-08.04): 게시된 에이전트 버전(마지막이 최신)
+    edge:
+      agent-versions: 1.0.0,1.1.0
     web-base-url: https://web.test
     outbox:
       relay-enabled: false

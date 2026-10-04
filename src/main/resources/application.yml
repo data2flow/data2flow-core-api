@@ -114,3 +114,12 @@ data2flow:
       simulator-base-url: ${DATA2FLOW_SIMULATOR_BASE_URL:http://data2flow-simulator}
       # 시작할 때 ACTIVE 조직마다 SIM 소스·하트비트 기기(__heartbeat__)·가상 드라이버를 보장(멱등)
       seed-on-startup: ${DATA2FLOW_SIM_SEED_ON_STARTUP:true}
+    # M5 데이터 소스(DSC-01.03·07.02): Webhook 수신 주소(외부 공개 호스트, ADR-029), 무중단 자격증명 교체(ingress가 교체 프로토콜을 지원한 뒤 켠다)
+    source:
+      webhook-base-url: ${DATA2FLOW_WEBHOOK_BASE_URL:https://data2flow-hook.java21.net}
+      zero-downtime-rotation: ${DATA2FLOW_SOURCE_ZERO_DOWNTIME_ROTATION:false}
+    # M5 엣지(DSC-08.03·08.04): 게시된 에이전트 버전(쉼표, 마지막이 최신), 설치 명령의 이미지·주소
+    edge:
+      agent-versions: ${DATA2FLOW_EDGE_AGENT_VERSIONS:1.0.0}
+      hook-base-url: ${DATA2FLOW_WEBHOOK_BASE_URL:https://data2flow-hook.java21.net}
+      image: ${DATA2FLOW_EDGE_IMAGE:ghcr.io/data2flow/data2flow-edge}
