@@ -188,7 +188,9 @@ class ContextSourceIT extends LoopItSupport {
     @Test
     @DisplayName("[DSC-06.04][AT-DSC-09.3][BR-DSC-18][TC-DSC-154] iCal URL: 카테고리 → 유형 매핑, 원본에서 사라진 일정은 삭제(수동 수정한 것은 '원본 삭제됨'으로 유지), UID로 중복 없음")
     void icalUrl() throws Exception {
-        String ics = new ClassPathResource("contracts/ical/academic-2026.ics").getContentAsString(StandardCharsets.UTF_8);
+        // 저장소는 줄 끝을 LF로 두므로 RFC 5545의 CRLF로 맞춘다
+        String ics = new ClassPathResource("contracts/ical/academic-2026.ics").getContentAsString(StandardCharsets.UTF_8)
+                .replace("\r\n", "\n").replace("\n", "\r\n");
         AtomicReference<String> served = new AtomicReference<>(ics);
         STUB.on("GET", "/cal.ics", req -> new StubHttpServer.Reply(200, served.get(), Map.of()));
         assertThat(putSource("ICAL", "{\"enabled\":true,\"url\":\"ftp://x/cal.ics\"}").getResponse().getStatus()).isEqualTo(400);
