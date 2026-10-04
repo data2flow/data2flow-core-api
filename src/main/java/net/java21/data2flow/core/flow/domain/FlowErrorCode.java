@@ -15,7 +15,9 @@ public enum FlowErrorCode implements ErrorCode {
     FLOW_NODE_LIMIT_EXCEEDED(400),
     FLOW_DEFINITION_TOO_LARGE(413),
     FLOW_TEMPLATE_NOT_FOUND(404),
-    FLOW_OWNER_INVALID(400);
+    FLOW_OWNER_INVALID(400),
+    /** API-FLW-14: 엔진 지표 API(FLW-05.05, M4)가 아직 없거나 응답하지 않는다 */
+    FLOW_METRICS_UNAVAILABLE(503);
 
     private final int httpStatus;
 
