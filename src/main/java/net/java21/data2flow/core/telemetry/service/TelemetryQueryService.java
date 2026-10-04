@@ -21,6 +21,9 @@ import net.java21.data2flow.core.telemetry.domain.ResolutionPlanner.Plan;
 import net.java21.data2flow.core.telemetry.domain.SeriesPoint;
 import net.java21.data2flow.core.telemetry.domain.TelemetryErrorCode;
 import net.java21.data2flow.core.telemetry.domain.TimeCursor;
+import net.java21.data2flow.core.telemetry.dto.TelemetryDtos.CompareSpaceSeries;
+import net.java21.data2flow.core.telemetry.dto.TelemetryDtos.CompareSpacesRequest;
+import net.java21.data2flow.core.telemetry.dto.TelemetryDtos.CompareSpacesResponse;
 import net.java21.data2flow.core.telemetry.dto.TelemetryDtos.GapResponse;
 import net.java21.data2flow.core.telemetry.dto.TelemetryDtos.LatestDeviceResponse;
 import net.java21.data2flow.core.telemetry.dto.TelemetryDtos.LatestMetricResponse;
@@ -369,6 +372,65 @@ public class TelemetryQueryService {
                     Duration.ofSeconds(3L * device.intervalSec()));
         }
         return new SeriesItem(deviceId, null, metric, label, unit, agg.key(), device.virtual(), arrays(points), gapResponses, null, null, null);
+    }
+
+    // ------------------------------------------------------------------ 공간 비교(DSH-02.04)
+
+    /** 공간 비교 최대 공간 수(DSH-02.04) */
+    static final int MAX_COMPARE_SPACES = 6;
+
+    /**
+     * 공간 여러 곳의 같은 측정 항목을 같은 집계 단위로(DSH-02.04, TC-DSH-018·019). 7곳 이상은 400 {@code WIDGET_QUERY_INVALID},
+     * 없는 공간·권한 범위 밖 공간이 하나라도 섞이면 404(그 공간이 있는지 드러내지 않음). 원본 단위는 쓸 수 없어 1m 이상으로 고른다.
+     */
+    @Transactional(readOnly = true)
+    public CompareSpacesResponse compareSpaces(CompareSpacesRequest req) {
+        roleChecker.require(Permission.TS_READ);
+        CurrentUser user = roleChecker.currentUser();
+        long orgId = user.organizationId();
+        if (req == null || req.spaceIds() == null || req.spaceIds().isEmpty()) {
+            throw invalid("spaceIds");
+        }
+        if (req.spaceIds().size() > MAX_COMPARE_SPACES) {
+            throw new BusinessException(TelemetryErrorCode.WIDGET_QUERY_INVALID, List.of(new FieldErrorDetail("spaceIds", "Size", "1~6")));
+        }
+        String metric = metricKeys(req.metricKey() == null ? null : List.of(req.metricKey())).getFirst();
+        List<Long> ids = new ArrayList<>();
+        for (int i = 0; i < req.spaceIds().size(); i++) {
+            String raw = req.spaceIds().get(i);
+            if (raw == null || !raw.strip().matches("\\d{1,18}")) {
+                throw invalid("spaceIds[" + i + "]");
+            }
+            long id = Long.parseLong(raw.strip());
+            if (ids.contains(id)) {
+                throw invalid("spaceIds[" + i + "]");
+            }
+            ids.add(id);
+        }
+        Instant now = clock.instant();
+        Instant to = req.to() == null ? now : req.to();
+        Instant from = requireFrom(req.from(), to);
+        String timezone = timezone(req.tz(), orgId, user.userId());
+        Resolution requested = resolution(req.resolution());
+        AggFunction func = spaceFunc(req.agg());
+        boolean virtual = Boolean.TRUE.equals(req.virtual());
+        List<SpaceInfo> spaces = new ArrayList<>();
+        for (long id : ids) {
+            SpaceInfo space = repository.findSpace(orgId, id).orElseThrow(() -> new BusinessException(CommonErrorCode.RESOURCE_NOT_FOUND));
+            roleChecker.requireSpace(space.id(), CommonErrorCode.RESOURCE_NOT_FOUND);
+            spaces.add(space);
+        }
+        Plan plan = ResolutionPlanner.plan(requested, from, to, now, false, () -> 0);
+        Map<Long, String> names = repository.findSpaceNames(orgId, ids);
+        List<CompareSpaceSeries> series = new ArrayList<>();
+        for (SpaceInfo space : spaces) {
+            SpaceSeries computed = spaceSeries(orgId, space, metric, func, plan.resolution(), from, to, true, virtual, null, null);
+            series.add(new CompareSpaceSeries(Long.toString(space.id()), names.get(space.id()), computed.deviceCount(), computed.excluded(),
+                    arrays(computed.points())));
+        }
+        MetricInfo definition = repository.findMetrics(orgId, List.of(metric)).get(metric);
+        return new CompareSpacesResponse(metric, definition == null ? null : definition.unit(), func.key(), plan.resolution().key(),
+                plan.reason(), timezone, series);
     }
 
     // ------------------------------------------------------------------ 원본 점 커서 목록

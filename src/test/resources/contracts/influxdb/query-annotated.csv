@@ -1,0 +1,15 @@
+#group,false,false,true,true,false,false,true,true,true
+#datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,double,string,string,string
+#default,_result,,,,,,,,
+,result,table,_start,_stop,_time,_value,_field,_measurement,device_id
+,,0,2026-09-01T00:00:00Z,2026-09-02T00:00:00Z,2026-09-01T00:00:00Z,812,co2,am107,24E124707C481005
+,,0,2026-09-01T00:00:00Z,2026-09-02T00:00:00Z,2026-09-01T00:10:00Z,830,co2,am107,24E124707C481005
+,,1,2026-09-01T00:00:00Z,2026-09-02T00:00:00Z,2026-09-01T00:00:00Z,23.4,temperature,am107,24E124707C481005
+,,2,2026-09-01T00:00:00Z,2026-09-02T00:00:00Z,2026-09-01T00:00:00Z,640,co2,am107,24E1FFFF00000001
+,,3,2026-09-01T00:00:00Z,2026-09-02T00:00:00Z,2026-09-01T00:00:00Z,22.1,temperature,am107,24E1FFFF00000002
+
+#group,false,false,true,true,false,false,true,true,true
+#datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,string,string,string,string
+#default,_result,,,,,,,,
+,result,table,_start,_stop,_time,_value,_field,_measurement,device_id
+,,4,2026-09-01T00:00:00Z,2026-09-02T00:00:00Z,2026-09-01T00:00:00Z,ok,status,am107,24E124707C481005

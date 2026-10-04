@@ -163,6 +163,10 @@ public class DeviceController {
     public ApiResponse<ImportReport> importCsv(@RequestParam("file") MultipartFile file,
                                                @RequestParam(required = false, defaultValue = "true") boolean dryRun,
                                                @RequestParam(required = false) String mode) throws IOException {
+        // 업로드 한도가 시계열 가져오기(2GB)에 맞춰 커졌으므로 기기 CSV는 여기서 10MB로 막는다(메모리로 읽음)
+        if (file.getSize() > 10L * 1024 * 1024) {
+            throw new net.java21.data2flow.contracts.error.BusinessException(net.java21.data2flow.contracts.error.CommonErrorCode.PAYLOAD_TOO_LARGE);
+        }
         return ApiResponse.success(imports.importCsv(file.getBytes(), dryRun, mode));
     }
 

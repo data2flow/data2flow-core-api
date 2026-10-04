@@ -11,7 +11,9 @@ public enum TelemetryErrorCode implements ErrorCode {
     TSD_TOO_MANY_SERIES(400),
     TSD_RESOLUTION_UNAVAILABLE(400),
     TSD_INVALID_AGG(400),
-    DEVICE_NOT_FOUND(404);
+    DEVICE_NOT_FOUND(404),
+    /** 공간 비교 7곳 이상 등 위젯 조회 조건 오류(DSH-02.04, TC-DSH-018) */
+    WIDGET_QUERY_INVALID(400);
 
     private final int httpStatus;
 
