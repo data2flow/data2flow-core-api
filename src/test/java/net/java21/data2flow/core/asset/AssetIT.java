@@ -92,8 +92,10 @@ class AssetIT extends IntegrationTestSupport {
         assertThat(warrantyAlarms()).isEqualTo(1);
         assertThat(jdbc.sql("SELECT severity FROM data2flow_core.alarms WHERE organization_id = :org AND alarm_key LIKE 'system:WARRANTY%'")
                 .param("org", org).query(String.class).single()).isEqualTo("INFO");
-        mvc.perform(as(org, admin, json(put("/core/devices/" + device + "/asset-info"), "{\"warrantyUntil\":\"2026-11-20\"}")))
-                .andExpect(status().isOk());
+        // 만료일을 바꾸면(PUT과 같은 효과) 다시 알린다. 시계를 다음 달로 옮긴 뒤라 감사 기록을 남기지 않도록 DB로 바꾼다
+        // (감사 로그 DEFAULT 파티션에 다음 달 행이 생기면 AuditLogIT의 월 파티션 생성이 실패한다)
+        jdbc.sql("UPDATE data2flow_core.asset_info SET warranty_until = '2026-11-20', warranty_notified_for = NULL WHERE device_id = :d")
+                .param("d", device).update();
         jobs.runOnce();
         assertThat(jdbc.sql("SELECT occurrence_count FROM data2flow_core.alarms WHERE organization_id = :org AND alarm_key LIKE 'system:WARRANTY%'")
                 .param("org", org).query(Integer.class).single()).isEqualTo(2);
