@@ -1,0 +1,64 @@
+{
+  "schema" : "data2flow.flow-definition/v1",
+  "mode" : {
+    "concurrency" : "queued",
+    "keyBy" : "deviceId",
+    "max" : 10
+  },
+  "nodes" : [ {
+    "id" : "n-trigger-1",
+    "type" : "trigger.telemetry",
+    "name" : "측정값",
+    "config" : {
+      "target" : {
+        "spaceId" : "31",
+        "relation" : "measures",
+        "includeChildren" : true
+      },
+      "metrics" : [ "co2" ]
+    }
+  }, {
+    "id" : "n-condition",
+    "type" : "condition.threshold",
+    "name" : "co2 > 1000 (5m)",
+    "config" : {
+      "metric" : "co2",
+      "op" : ">",
+      "value" : 1000,
+      "for" : "PT5M",
+      "clear" : 900
+    }
+  }, {
+    "id" : "n-alarm-raise",
+    "type" : "action.alarm",
+    "name" : "알람 발생",
+    "config" : {
+      "mode" : "raise",
+      "ruleId" : "42",
+      "severity" : "MAJOR",
+      "title" : "{{space.name}} CO2 {{value}}ppm",
+      "targetBy" : "device"
+    }
+  }, {
+    "id" : "n-alarm-clear",
+    "type" : "action.alarm",
+    "name" : "알람 해제",
+    "config" : {
+      "mode" : "clear",
+      "ruleId" : "42",
+      "targetBy" : "device"
+    }
+  } ],
+  "wires" : [ {
+    "from" : "n-trigger-1",
+    "to" : "n-condition"
+  }, {
+    "from" : "n-condition",
+    "port" : "true",
+    "to" : "n-alarm-raise"
+  }, {
+    "from" : "n-condition",
+    "port" : "false",
+    "to" : "n-alarm-clear"
+  } ]
+}

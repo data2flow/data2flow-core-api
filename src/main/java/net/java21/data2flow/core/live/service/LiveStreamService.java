@@ -77,6 +77,22 @@ public class LiveStreamService {
         return emitter;
     }
 
+    /**
+     * API-RUL-14 알람 전용 스트림({@code GET /core/stream/alarms}): ALARM_READ. 이벤트 {@code alarm.raised}·{@code alarm.updated}(재발생·확인·
+     * 억제·플래핑)·{@code alarm.cleared}, data는 Alarm 요약(EVT-RUL-02 {@code alarm}). 권한 밖 공간의 알람은 보내지 않는다.
+     */
+    public SseEmitter openAlarms(String sessionId) {
+        AccessGrant grant = roleChecker.require(Permission.ALARM_READ);
+        CurrentUser user = roleChecker.currentUser();
+        Subscription subscription = Subscription.alarmStream(grant);
+        SseEmitter emitter = new SseEmitter(settings.emitterTimeout().toMillis());
+        LiveConnection connection = new LiveConnection(user.organizationId(), user.userId(), parseSession(sessionId),
+                List.of(new LiveTopic.Alarms("alarms")), subscription, emitter, settings.queueCapacity(), hub::remove);
+        connection.send("ready", hub.write(new Ready(subscription.accepted(), subscription.rejected(), clock.instant())));
+        hub.register(connection);
+        return emitter;
+    }
+
     /** 모두 거부됐을 때 403을 낼 권한(감사 ACCESS_DENIED에 남는다). 권한은 있고 범위 밖일 뿐이면 null: 연결은 열고 이벤트만 없다(TC-DSH-051) */
     static Permission firstMissingPermission(List<LiveTopic> topics, AccessGrant grant) {
         for (LiveTopic t : topics) {
@@ -86,6 +102,7 @@ public class LiveStreamService {
                 case LiveTopic.Telemetry tm -> Permission.TS_READ;
                 case LiveTopic.Sources so -> Permission.SRC_READ;
                 case LiveTopic.Commands co -> Permission.DEV_READ;
+                case LiveTopic.Alarms al -> Permission.ALARM_READ;
                 default -> Permission.DASHBOARD_READ;
             };
             if (!grant.has(needed)) {

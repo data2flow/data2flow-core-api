@@ -17,7 +17,11 @@ public enum FlowErrorCode implements ErrorCode {
     FLOW_TEMPLATE_NOT_FOUND(404),
     FLOW_OWNER_INVALID(400),
     /** API-FLW-14: 엔진 지표 API(FLW-05.05, M4)가 아직 없거나 응답하지 않는다 */
-    FLOW_METRICS_UNAVAILABLE(503);
+    FLOW_METRICS_UNAVAILABLE(503),
+    /** API-FLW-50 쓰는 플로우가 있는 Sink 연결 삭제 */
+    SINK_CONNECTION_IN_USE(409),
+    /** API-FLW-51 연결 테스트 실패(원인 AUTH·DNS·TLS·TIMEOUT·REFUSED·OTHER) */
+    SINK_CONNECTION_TEST_FAILED(502);
 
     private final int httpStatus;
 

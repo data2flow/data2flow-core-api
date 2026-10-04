@@ -25,7 +25,7 @@ public class ControlProfileRepository {
 
     public record ProfileRow(long deviceId, long organizationId, String name, String status, boolean virtual, Long spaceId,
                              boolean sandbox, Long modelId, String modelCode, String modelCapabilities, String externalId,
-                             long sourceId, Long driverId, Long encoderScriptId) {
+                             long sourceId, Long driverId, Long encoderScriptId, String spacePath, Integer reportIntervalSec) {
     }
 
     @OrganizationScopeExempt("기기 ID는 전역 고유이고 응답에 organizationId를 담는다(action 내부 호출, ADR-021)")
@@ -35,7 +35,8 @@ public class ControlProfileRepository {
                                EXISTS (SELECT 1 FROM data2flow_core.spaces a WHERE a.organization_id = d.organization_id AND a.sandbox
                                          AND s.path LIKE a.path || '%') AS sandbox,
                                d.model_id, m.code AS model_code, m.capabilities::text AS model_capabilities, d.external_id, d.source_id,
-                               b.driver_id, b.encoder_script_id
+                               b.driver_id, b.encoder_script_id, s.path AS space_path,
+                               coalesce(d.expected_interval_sec, m.default_interval_sec) AS report_interval_sec
                           FROM data2flow_core.devices d
                           LEFT JOIN data2flow_core.spaces s ON s.id = d.space_id AND s.organization_id = d.organization_id
                           LEFT JOIN data2flow_core.device_models m ON m.id = d.model_id AND m.organization_id = d.organization_id
@@ -57,6 +58,7 @@ public class ControlProfileRepository {
         return new ProfileRow(rs.getLong("id"), rs.getLong("organization_id"), rs.getString("name"), rs.getString("status"),
                 rs.getBoolean("is_virtual"), Pg.longOrNull(rs, "space_id"), rs.getBoolean("sandbox"), Pg.longOrNull(rs, "model_id"),
                 rs.getString("model_code"), rs.getString("model_capabilities"), rs.getString("external_id"), rs.getLong("source_id"),
-                Pg.longOrNull(rs, "driver_id"), Pg.longOrNull(rs, "encoder_script_id"));
+                Pg.longOrNull(rs, "driver_id"), Pg.longOrNull(rs, "encoder_script_id"), rs.getString("space_path"),
+                (Integer) rs.getObject("report_interval_sec"));
     }
 }

@@ -1,0 +1,75 @@
+{
+  "schema" : "data2flow.flow-definition/v1",
+  "mode" : {
+    "concurrency" : "queued",
+    "keyBy" : "deviceId",
+    "max" : 10
+  },
+  "nodes" : [ {
+    "id" : "n-trigger-1",
+    "type" : "trigger.telemetry",
+    "name" : "측정값",
+    "config" : {
+      "target" : {
+        "spaceId" : "31",
+        "relation" : "measures",
+        "includeChildren" : true
+      },
+      "metrics" : [ "door" ]
+    }
+  }, {
+    "id" : "n-time-window",
+    "type" : "condition.timeWindow",
+    "name" : "시간 조건",
+    "config" : {
+      "spaceSchedule" : {
+        "match" : "outside"
+      }
+    }
+  }, {
+    "id" : "n-condition",
+    "type" : "condition.threshold",
+    "name" : "door == 1",
+    "config" : {
+      "metric" : "door",
+      "op" : "==",
+      "value" : 1
+    }
+  }, {
+    "id" : "n-alarm-raise",
+    "type" : "action.alarm",
+    "name" : "알람 발생",
+    "config" : {
+      "mode" : "raise",
+      "ruleId" : "42",
+      "severity" : "CRITICAL",
+      "title" : "운영 시간 외 문 열림",
+      "targetBy" : "device"
+    }
+  }, {
+    "id" : "n-alarm-clear",
+    "type" : "action.alarm",
+    "name" : "알람 해제",
+    "config" : {
+      "mode" : "clear",
+      "ruleId" : "42",
+      "targetBy" : "device"
+    }
+  } ],
+  "wires" : [ {
+    "from" : "n-trigger-1",
+    "to" : "n-time-window"
+  }, {
+    "from" : "n-time-window",
+    "port" : "true",
+    "to" : "n-condition"
+  }, {
+    "from" : "n-condition",
+    "port" : "true",
+    "to" : "n-alarm-raise"
+  }, {
+    "from" : "n-condition",
+    "port" : "false",
+    "to" : "n-alarm-clear"
+  } ]
+}

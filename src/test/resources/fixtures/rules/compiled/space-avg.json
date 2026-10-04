@@ -1,0 +1,77 @@
+{
+  "schema" : "data2flow.flow-definition/v1",
+  "mode" : {
+    "concurrency" : "queued",
+    "keyBy" : "spaceId",
+    "max" : 10
+  },
+  "nodes" : [ {
+    "id" : "n-trigger-1",
+    "type" : "trigger.telemetry",
+    "name" : "측정값",
+    "config" : {
+      "target" : {
+        "spaceId" : "31",
+        "relation" : "measures",
+        "includeChildren" : true
+      },
+      "metrics" : [ "temperature" ]
+    }
+  }, {
+    "id" : "n-aggregate",
+    "type" : "transform.aggregate",
+    "name" : "공간 집계",
+    "config" : {
+      "window" : "PT1M",
+      "fn" : "avg",
+      "groupBy" : "space",
+      "metric" : "temperature"
+    }
+  }, {
+    "id" : "n-condition",
+    "type" : "condition.threshold",
+    "name" : "temperature > 27 (5m)",
+    "config" : {
+      "metric" : "temperature",
+      "op" : ">",
+      "value" : 27,
+      "for" : "PT5M",
+      "clear" : 26
+    }
+  }, {
+    "id" : "n-alarm-raise",
+    "type" : "action.alarm",
+    "name" : "알람 발생",
+    "config" : {
+      "mode" : "raise",
+      "ruleId" : "42",
+      "severity" : "MAJOR",
+      "title" : "평균 고온",
+      "targetBy" : "space"
+    }
+  }, {
+    "id" : "n-alarm-clear",
+    "type" : "action.alarm",
+    "name" : "알람 해제",
+    "config" : {
+      "mode" : "clear",
+      "ruleId" : "42",
+      "targetBy" : "space"
+    }
+  } ],
+  "wires" : [ {
+    "from" : "n-trigger-1",
+    "to" : "n-aggregate"
+  }, {
+    "from" : "n-aggregate",
+    "to" : "n-condition"
+  }, {
+    "from" : "n-condition",
+    "port" : "true",
+    "to" : "n-alarm-raise"
+  }, {
+    "from" : "n-condition",
+    "port" : "false",
+    "to" : "n-alarm-clear"
+  } ]
+}

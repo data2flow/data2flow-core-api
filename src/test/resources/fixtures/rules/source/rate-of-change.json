@@ -1,0 +1,1 @@
+{"name":"급상승","scope":{"type":"DEVICE","ids":["17"]},"condition":{"kind":"rateOfChange","metric":"temperature","window":"PT10M","delta":3,"direction":"up"},"severity":"MAJOR","titleTemplate":"온도 급상승"}

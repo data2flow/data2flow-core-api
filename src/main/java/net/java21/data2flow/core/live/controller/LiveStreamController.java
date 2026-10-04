@@ -55,4 +55,23 @@ public class LiveStreamController {
             return null;
         }
     }
+
+    /** API-RUL-14 알람 실시간 스트림(BFF {@code /bff/stream/alarms}) */
+    @GetMapping("/core/stream/alarms")
+    public SseEmitter alarms(@RequestHeader(value = DataflowHeaders.SESSION_ID, required = false) String sessionId,
+                             HttpServletResponse response) throws IOException {
+        try {
+            SseEmitter emitter = service.openAlarms(sessionId);
+            response.setHeader("Cache-Control", "no-store");
+            response.setHeader("X-Accel-Buffering", "no");
+            return emitter;
+        } catch (BusinessException ex) {
+            response.setStatus(ex.getErrorCode().httpStatus());
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+            response.getWriter().write(json.writeValueAsString(ErrorResponse.of(ex.getErrorCode().code(),
+                    messages.resolve(ex.getErrorCode(), ex.getArgs()), ex.getErrors())));
+            return null;
+        }
+    }
 }

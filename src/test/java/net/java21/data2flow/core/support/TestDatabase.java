@@ -26,7 +26,7 @@ public final class TestDatabase {
 
     /** 비우지 않는 테이블: Flyway 이력, 감사 로그(INSERT 전용), 마이그레이션 시드(시스템 공용 카탈로그·템플릿) */
     static final Set<String> KEEP = Set.of("flyway_schema_history", "audit_logs", "audit_logs_default",
-            "connector_catalogs", "connector_templates");
+            "connector_catalogs", "connector_templates", "rule_templates", "notification_templates");
 
     private static volatile String truncateSql;
 

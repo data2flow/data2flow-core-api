@@ -1,0 +1,1 @@
+{"name":"이상 점수","scope":{"type":"DEVICE","ids":["17"]},"condition":{"kind":"anomaly","metric":"temperature","minScore":3},"severity":"WARNING","titleTemplate":"이상"}

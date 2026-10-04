@@ -77,4 +77,14 @@ public final class LiveDtos {
                                 String result, String errorCode, String raw, String rawEncoding, Boolean rawTruncated,
                                 Object canonical) {
     }
+
+    /** {@code alarms} 토픽 {@code alarm}(API-DSH-20). {@code event}는 EVT-RUL-02 라우팅 키(alarm.raised 등) */
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    public record AlarmTopic(String alarmId, String state, String severity, String spaceId, String title, String event) {
+    }
+
+    /** {@code notifications} 토픽 {@code notification}(API-DSH-20). 읽음 수(unreadCount)는 알림 센터(DSH-10.01, M7)부터 */
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    public record Notification(String id, String category, String title, String link, java.time.Instant createdAt, String alarmId) {
+    }
 }

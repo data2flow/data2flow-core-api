@@ -1,0 +1,1 @@
+{"name":"CO2 하나라도 높거나 평균 높음","scope":{"type":"SPACE","ids":["31"]},"condition":{"kind":"group","op":"OR","items":[{"kind":"threshold","metric":"co2","op":">","value":1500,"aggregate":"any"},{"kind":"threshold","metric":"co2","op":">","value":1200,"aggregate":"spaceAvg"}]},"severity":"MAJOR","titleTemplate":"공간 CO2"}

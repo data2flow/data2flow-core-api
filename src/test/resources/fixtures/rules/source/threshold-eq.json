@@ -1,0 +1,1 @@
+{"name":"문 열림","scope":{"type":"TAG","ids":["door"]},"condition":{"kind":"threshold","metric":"door","op":"=","value":1},"severity":"WARNING","titleTemplate":"문 열림"}

@@ -56,8 +56,52 @@ public class ActionClient {
                 InternalHttp.query("capability", capability), null);
     }
 
-    public JsonNode healthcheck(long driverId) {
-        return http.call(HttpMethod.POST, "/internal/action/drivers/" + driverId + "/healthcheck", null, null);
+    /** 연결 확인 본문 {type, config, secrets}(core가 복호화, ADR-049) */
+    public JsonNode healthcheck(long driverId, Map<String, Object> body) {
+        return http.call(HttpMethod.POST, "/internal/action/drivers/" + driverId + "/healthcheck", null, body);
+    }
+
+    /** API-ACT-05 일괄 제어(미리보기 200·실행 202) */
+    public Result bulk(Map<String, Object> body, String idempotencyKey) {
+        return http.send(HttpMethod.POST, "/internal/action/bulk", null, body,
+                h -> {
+                    if (idempotencyKey != null) {
+                        h.set(DataflowHeaders.IDEMPOTENCY_KEY, idempotencyKey);
+                    }
+                });
+    }
+
+    public JsonNode bulkJob(String jobId) {
+        return http.call(HttpMethod.GET, "/internal/action/bulk-jobs/" + jobId, null, null);
+    }
+
+    /** API-ACT-11 장면 실행 → 202 {sceneRunId} */
+    public Result runScene(long sceneId, Map<String, Object> body, String idempotencyKey) {
+        return http.send(HttpMethod.POST, "/internal/action/scenes/" + sceneId + "/run", null, body,
+                h -> {
+                    if (idempotencyKey != null) {
+                        h.set(DataflowHeaders.IDEMPOTENCY_KEY, idempotencyKey);
+                    }
+                });
+    }
+
+    public JsonNode previewScene(long sceneId) {
+        return http.call(HttpMethod.POST, "/internal/action/scenes/" + sceneId + "/preview", null, Map.of());
+    }
+
+    public JsonNode sceneRun(String runId) {
+        return http.call(HttpMethod.GET, "/internal/action/scene-runs/" + runId, null, null);
+    }
+
+    /** API-ACT-35 가동·효과 */
+    public JsonNode runtime(long deviceId, String from, String to) {
+        return http.call(HttpMethod.GET, "/internal/action/devices/" + deviceId + "/runtime", InternalHttp.query("from", from, "to", to), null);
+    }
+
+    /** API-ACT-16 인터락 차단 기록 */
+    public JsonNode interlockBlocks(long interlockId, String from, String to) {
+        return http.call(HttpMethod.GET, "/internal/action/interlocks/" + interlockId + "/blocks", InternalHttp.query("from", from, "to", to),
+                null);
     }
 
     public JsonNode metrics(long driverId, String window) {

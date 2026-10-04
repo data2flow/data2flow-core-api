@@ -1,0 +1,1 @@
+{"name":"범위 안","scope":{"type":"DEVICE","ids":["5"]},"condition":{"kind":"threshold","metric":"humidity","op":"inside","range":[40,60]},"severity":"INFO","titleTemplate":"습도 정상"}

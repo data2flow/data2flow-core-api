@@ -28,6 +28,7 @@ import java.util.Set;
  *   <li>{@code ingest}·{@code ingest-messages}: INGEST_READ(OPERATOR 이상). 원본 payload는 INGEST_PAYLOAD_READ만</li>
  *   <li>{@code sources}: SRC_READ(소스 화면을 볼 수 있는 역할)</li>
  *   <li>{@code commands:{deviceId}}: DEV_READ + 기기의 공간이 범위 안(ACT-04.02 명령 결과 실시간 표시)</li>
+ *   <li>{@code alarms}: ALARM_READ(알람마다 공간 범위로 다시 거른다). {@code notifications}: 로그인한 본인(본인에게 간 알림만)</li>
  * </ul>
  * 거부한 토픽은 이유를 밝히지 않고 {@code rejected}에 둔다(없는 것과 범위 밖을 구분하지 않음, BR-IAM-16).
  */
@@ -45,6 +46,8 @@ public class LiveSubscriptions {
         boolean home = false;
         boolean ingest = false;
         boolean sources = false;
+        boolean alarms = false;
+        boolean notifications = false;
         Map<Long, Set<Long>> spaces = new HashMap<>();
         Map<Long, Set<String>> telemetry = new HashMap<>();
         List<LiveTopic.IngestMessages> messages = new ArrayList<>();
@@ -58,6 +61,8 @@ public class LiveSubscriptions {
                 case LiveTopic.Ingest i -> ingest = grant.has(Permission.INGEST_READ);
                 case LiveTopic.Sources x -> sources = grant.has(Permission.SRC_READ);
                 case LiveTopic.Future f -> grant.has(Permission.DASHBOARD_READ);
+                case LiveTopic.Alarms a -> alarms = grant.has(Permission.ALARM_READ);
+                case LiveTopic.Notifications n -> notifications = true;
                 case LiveTopic.Commands c -> {
                     if (!grant.has(Permission.DEV_READ)) {
                         yield false;
@@ -108,7 +113,7 @@ public class LiveSubscriptions {
         }
         return new Subscription(grant, home, ingest, spaces, telemetry, List.copyOf(messages),
                 grant.has(Permission.INGEST_PAYLOAD_READ), List.copyOf(accepted), List.copyOf(rejected), sources,
-                Set.copyOf(commandDevices));
+                Set.copyOf(commandDevices), alarms, notifications, false);
     }
 
     /** 수집 메시지 필터의 소스·기기가 이 조직에 있고(기기는 범위 안) 볼 수 있는가 */

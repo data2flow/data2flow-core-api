@@ -34,8 +34,13 @@ public class SpaceOverviewService {
     private final RoleChecker roleChecker;
     private final DashboardRepository repository;
     private final ComfortService comfort;
+    private final net.java21.data2flow.core.alarm.repository.AlarmRepository alarms;
+    private final tools.jackson.databind.json.JsonMapper json;
 
-    public SpaceOverviewService(RoleChecker roleChecker, DashboardRepository repository, ComfortService comfort) {
+    public SpaceOverviewService(RoleChecker roleChecker, DashboardRepository repository, ComfortService comfort,
+                                net.java21.data2flow.core.alarm.repository.AlarmRepository alarms, tools.jackson.databind.json.JsonMapper json) {
+        this.alarms = alarms;
+        this.json = json;
         this.roleChecker = roleChecker;
         this.repository = repository;
         this.comfort = comfort;
@@ -66,7 +71,13 @@ public class SpaceOverviewService {
                 .filter(c -> scope.includes(c.id()))
                 .map(c -> new ChildSpace(Long.toString(c.id()), c.name(), c.type(), comfort.evaluate(ctx, c.id()).state().name()))
                 .toList();
-        return new SpaceOverviewResponse(info, comfort.view(ctx, spaceId), devices, List.of(),
+        // 열린 알람(DSH-02.01): 이 공간과 하위(범위 안)의 ACTIVE·ACKNOWLEDGED·SUPPRESSED, 최근 순 50건
+        String spacePath = alarms.findSpacePath(orgId, spaceId).orElse(null);
+        List<Object> openAlarms = spacePath == null ? List.of() : alarms.search(new net.java21.data2flow.core.alarm.repository.AlarmRepository.Search(
+                        orgId, List.of("ACTIVE", "ACKNOWLEDGED", "SUPPRESSED"), null, spacePath, null, null, null, null,
+                        scope.unrestricted() ? null : alarms.listSpacePaths(orgId, scope.allowedSpaceIds()), null, null), 50, 0).stream()
+                .map(a -> (Object) net.java21.data2flow.core.alarm.service.AlarmViews.view(a, json)).toList();
+        return new SpaceOverviewResponse(info, comfort.view(ctx, spaceId), devices, openAlarms,
                 repository.existsFloorplan(orgId, spaceId), children);
     }
 

@@ -60,7 +60,8 @@ public final class ControlDtos {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record ControlProfileResponse(String deviceId, String organizationId, String spaceId, String name, String externalId,
                                          boolean virtual, String status, String modelId, Map<String, ProfileCapability> capabilities,
-                                         ProfileDriver driver, ProfileSettings settings, boolean sandbox, boolean controllable) {
+                                         ProfileDriver driver, ProfileSettings settings, boolean sandbox, boolean controllable,
+                                         List<String> spacePathIds, Integer reportIntervalSec, Double ratedPowerW) {
     }
 
     /** 기능 하나의 모델 제약(속성 → {min,max,enum})·보호·재연결 시 재적용·Class A 다운링크 */
@@ -69,9 +70,10 @@ public final class ControlDtos {
                                     boolean classADownlink) {
     }
 
-    /** 연결된 드라이버(비밀값 제외) */
+    /** 연결된 드라이버. M4(ADR-049): core가 복호화한 비밀값 {@code secrets}와 서킷 설정 {@code circuit} */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record ProfileDriver(String driverId, String type, JsonNode config, int ackTimeoutSec, int applyTimeoutSec, JsonNode retry) {
+    public record ProfileDriver(String driverId, String type, JsonNode config, int ackTimeoutSec, int applyTimeoutSec, JsonNode retry,
+                                JsonNode secrets, JsonNode circuit) {
     }
 
     /** 조직 제어 설정(절대 한계 등) */

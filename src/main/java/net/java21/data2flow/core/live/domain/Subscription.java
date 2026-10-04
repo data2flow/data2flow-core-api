@@ -20,15 +20,25 @@ import java.util.Set;
  * @param rejected       권한·범위 밖이라 이벤트가 없을 토픽 이름
  * @param sources        {@code sources} 수락(SRC_READ)
  * @param commandDevices {@code commands:{deviceId}} 수락분 기기 ID
+ * @param alarms         {@code alarms} 수락(ALARM_READ)
+ * @param notifications  {@code notifications} 수락(본인 웹 알림)
+ * @param alarmStream    API-RUL-14 알람 전용 스트림({@code alarm.raised|updated|cleared} 이벤트, ALARM_READ)
  */
 public record Subscription(AccessGrant grant, boolean home, boolean ingest, Map<Long, Set<Long>> spaceTopics,
                            Map<Long, Set<String>> telemetry, List<LiveTopic.IngestMessages> messages, boolean payload,
                            List<String> accepted, List<String> rejected, boolean sources,
-                           Set<Long> commandDevices) {
+                           Set<Long> commandDevices, boolean alarms, boolean notifications, boolean alarmStream) {
 
     /** 토픽 없는 연결(실행 스트림 등 따로 판정한 연결) */
     public static Subscription empty(AccessGrant grant) {
-        return new Subscription(grant, false, false, Map.of(), Map.of(), List.of(), false, List.of(), List.of(), false, Set.of());
+        return new Subscription(grant, false, false, Map.of(), Map.of(), List.of(), false, List.of(), List.of(), false, Set.of(), false,
+                false, false);
+    }
+
+    /** API-RUL-14 알람 전용 스트림 */
+    public static Subscription alarmStream(AccessGrant grant) {
+        return new Subscription(grant, false, false, Map.of(), Map.of(), List.of(), false, List.of("alarms"), List.of(), false, Set.of(), false,
+                false, true);
     }
 
     /** 이 공간의 기기 변경을 받을 space 토픽들 */

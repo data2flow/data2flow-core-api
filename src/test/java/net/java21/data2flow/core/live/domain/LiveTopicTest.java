@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LiveTopicTest {
 
     @Test
-    @DisplayName("[DSH-05.01] 토픽 이름을 읽는다: home·space·telemetry(d 접두사 허용)·ingest·ingest-messages·이후 마일스톤 토픽")
+    @DisplayName("[DSH-05.01] 토픽 이름을 읽는다: home·space·telemetry(d 접두사 허용)·ingest·ingest-messages·alarms·notifications(M4)·이후 마일스톤 토픽")
     void parsesTopics() {
         LiveTopic.Parsed parsed = LiveTopic.parse(
                 "home, space:31,telemetry:1042.co2,telemetry:d17.temperature,ingest,ingest-messages?sourceId=3&deviceId=&result=script_error,"
@@ -26,8 +26,8 @@ class LiveTopicTest {
                 new LiveTopic.Telemetry("telemetry:d17.temperature", 17, "temperature"),
                 new LiveTopic.Ingest("ingest"),
                 new LiveTopic.IngestMessages("ingest-messages?sourceId=3&deviceId=&result=script_error", 3L, null, "SCRIPT_ERROR"),
-                new LiveTopic.Future("notifications"),
-                new LiveTopic.Future("alarms"),
+                new LiveTopic.Notifications("notifications"),
+                new LiveTopic.Alarms("alarms"),
                 new LiveTopic.Commands("commands:5", 5),
                 new LiveTopic.Future("analytics:run:9"));
         assertThat(LiveTopic.parse("sources").valid()).containsExactly(new LiveTopic.Sources("sources"));

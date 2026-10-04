@@ -42,7 +42,7 @@ public final class DashboardDtos {
 
     /**
      * 홈 요약. pendingDevices는 기기 배치 권한(DEV_PLACE)이 있을 때만, sources는 소스 조회 권한(SRC_READ)이 있을 때만 싣는다.
-     * timeline(알람·제어, M4)과 aiSummary(M7)는 아직 원천이 없어 빈 목록·생략이다.
+     * timeline은 최근 7일 알람 발생·해제와 제어 20건(M4 DSH-01.03), aiSummary(M7)는 아직 원천이 없어 생략이다.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record HomeSummaryResponse(AlarmCounts alarms, long offlineDevices, Long pendingDevices, double ingestPerMinute,
@@ -76,7 +76,7 @@ public final class DashboardDtos {
     public record ChildSpace(String id, String name, String type, String comfortState) {
     }
 
-    /** openAlarms는 M4(알람)까지 빈 목록 */
+    /** openAlarms: 이 공간과 하위의 열린 알람(API-RUL-10 Alarm, M4 DSH-02.01) */
     public record SpaceOverviewResponse(SpaceInfo space, ComfortView comfort, List<OverviewDevice> devices, List<Object> openAlarms,
                                         boolean hasFloorplan, List<ChildSpace> children) {
     }

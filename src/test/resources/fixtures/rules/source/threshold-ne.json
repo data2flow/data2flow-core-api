@@ -1,0 +1,1 @@
+{"name":"모드 이상","scope":{"type":"DEVICE","ids":["5"]},"condition":{"kind":"threshold","metric":"mode","op":"!=","value":2},"severity":"INFO","titleTemplate":"모드"}

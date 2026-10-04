@@ -1,0 +1,1 @@
+{"name":"저온","scope":{"type":"MODEL","ids":["7"]},"condition":{"kind":"threshold","metric":"temperature","op":"<","value":18,"for":"PT10M","clear":19},"severity":"MINOR","titleTemplate":"저온"}

@@ -1,0 +1,1 @@
+{"name":"실습실 고CO2","scope":{"type":"SPACE","ids":["31"],"includeChildren":true},"condition":{"kind":"threshold","metric":"co2","op":">","value":1000,"for":"PT5M","clear":900},"severity":"MAJOR","titleTemplate":"{{space.name}} CO2 {{value}}ppm"}

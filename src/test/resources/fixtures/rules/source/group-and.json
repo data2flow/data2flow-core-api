@@ -1,0 +1,1 @@
+{"name":"재실 중 고CO2","scope":{"type":"SPACE","ids":["31"]},"condition":{"kind":"group","op":"AND","items":[{"kind":"threshold","metric":"co2","op":">","value":1000},{"kind":"threshold","metric":"occupancy","op":"=","value":1}]},"severity":"MAJOR","titleTemplate":"재실 중 CO2"}

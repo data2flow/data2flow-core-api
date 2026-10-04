@@ -1,0 +1,1 @@
+{"name":"반복 3회","scope":{"type":"DEVICE","ids":["17"]},"condition":{"kind":"threshold","metric":"co2","op":">","value":1000,"for":"PT5M","repeat":3},"timeCondition":{"days":[1,2,3,4,5],"from":"09:00","to":"18:00"},"severity":"MAJOR","titleTemplate":"반복"}

@@ -1,0 +1,1 @@
+{"name":"운영 시간 외 문 열림","scope":{"type":"SPACE","ids":["31"]},"condition":{"kind":"threshold","metric":"door","op":"==","value":1},"timeCondition":{"spaceSchedule":"OUTSIDE"},"severity":"CRITICAL","titleTemplate":"운영 시간 외 문 열림"}

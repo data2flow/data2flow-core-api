@@ -2,6 +2,7 @@ package net.java21.data2flow.core.config;
 
 import net.java21.data2flow.contracts.message.MessageCodec;
 import net.java21.data2flow.contracts.messaging.MessagingNames;
+import net.java21.data2flow.contracts.messaging.QuorumQueueSpec;
 import net.java21.data2flow.core.messaging.service.CoreEventConsumer;
 import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.Binding;
@@ -44,6 +45,30 @@ public class MessagingConfig {
     @Bean
     FanoutExchange data2flowConfigExchange() {
         return new FanoutExchange(MessagingNames.EXCHANGE_CONFIG, true, false);
+    }
+
+    /**
+     * 알림 요청 큐 {@code action.notifications}(소비자 action)를 생산자인 core도 같은 인자로 선언한다: action이 아직 뜨지 않았어도 요청이 큐에
+     * 남아 유실되지 않는다(QuorumQueueSpec 인자가 같아 선언이 겹쳐도 충돌하지 않음, flow-engine의 {@code action.commands}와 같은 방식).
+     */
+    @Bean
+    Declarables actionNotificationsDeclarables() {
+        return actionQueue(QuorumQueueSpec.ACTION_NOTIFICATIONS);
+    }
+
+    /** 예약 제어 명령·장면(ACT-02.07)도 core가 생산하므로 {@code action.commands}를 같은 인자로 선언한다 */
+    @Bean
+    Declarables actionCommandsDeclarables() {
+        return actionQueue(QuorumQueueSpec.ACTION_COMMANDS);
+    }
+
+    static Declarables actionQueue(QuorumQueueSpec spec) {
+        DirectExchange actions = new DirectExchange(MessagingNames.EXCHANGE_ACTIONS, true, false);
+        DirectExchange dlx = new DirectExchange(MessagingNames.EXCHANGE_DLX, true, false);
+        Queue queue = QueueBuilder.durable(spec.name()).withArguments(spec.arguments()).build();
+        Queue dlq = QueueBuilder.durable(spec.deadLetterQueue()).withArguments(QuorumQueueSpec.deadLetterArguments()).build();
+        return new Declarables(actions, dlx, queue, dlq, BindingBuilder.bind(queue).to(actions).with(spec.routingKey()),
+                BindingBuilder.bind(dlq).to(dlx).with(spec.name()));
     }
 
     /** 서비스에 하나(스레드 안전). 계약 메시지 직렬화·역직렬화 */

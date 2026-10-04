@@ -37,9 +37,11 @@ public class ControlInternalService {
     private final CapabilityService capabilities;
     private final ControlSettingsService settings;
     private final JsonMapper json;
+    private final net.java21.data2flow.contracts.secret.SecretCipher cipher;
 
     public ControlInternalService(ControlProfileRepository profiles, DriverRepository drivers, CapabilityService capabilities,
-                                  ControlSettingsService settings, JsonMapper json) {
+                                  ControlSettingsService settings, JsonMapper json, net.java21.data2flow.contracts.secret.SecretCipher cipher) {
+        this.cipher = cipher;
         this.profiles = profiles;
         this.drivers = drivers;
         this.capabilities = capabilities;
@@ -75,7 +77,10 @@ public class ControlInternalService {
         ProfileDriver driver = null;
         if (row.driverId() != null) {
             driver = drivers.findById(orgId, row.driverId()).map(d -> new ProfileDriver(Long.toString(d.id()), d.type(),
-                    json.readTree(d.config()), d.ackTimeoutSec(), d.applyTimeoutSec(), json.readTree(d.retry()))).orElse(null);
+                    json.readTree(d.config()), d.ackTimeoutSec(), d.applyTimeoutSec(), json.readTree(d.retry()),
+                    drivers.findSecret(orgId, d.id()).map(enc -> json.readTree(new String(cipher.decryptBytes(enc,
+                            "data2flow_core.drivers.secret:" + d.id()), java.nio.charset.StandardCharsets.UTF_8))).orElse(null),
+                    d.circuit() == null ? null : json.readTree(d.circuit()))).orElse(null);
         }
         SettingsRow s = settings.settings(orgId);
         boolean controllable = "ACTIVE".equals(row.status()) && commandable && driver != null;
@@ -84,7 +89,32 @@ public class ControlInternalService {
                 row.modelId() == null ? null : Long.toString(row.modelId()), caps, driver,
                 new ProfileSettings(json.readTree(s.absoluteLimits()), s.manualOverrideMinutes(), s.minIntervalSec(),
                         json.readTree(s.oscillation()), s.defaultValiditySec(), s.scheduleRespectsManualOverride()),
-                row.sandbox(), controllable);
+                row.sandbox(), controllable, pathIds(row.spacePath()), row.reportIntervalSec(), ratedPower(modelCaps));
+    }
+
+    /** 루트 → 기기 공간 ID(비상 정지 범위 판정, ADR-049) */
+    static List<String> pathIds(String path) {
+        List<String> out = new ArrayList<>();
+        if (path != null) {
+            for (String part : path.split("/")) {
+                if (!part.isBlank()) {
+                    out.add(part);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** 정격 전력(W): 모델 기능 항목의 {@code ratedPowerW} 중 첫 값(가동 집계 ACT-08.02) */
+    static Double ratedPower(JsonNode modelCaps) {
+        if (modelCaps != null && modelCaps.isArray()) {
+            for (JsonNode n : modelCaps.values()) {
+                if (n.path("ratedPowerW").isNumber()) {
+                    return n.get("ratedPowerW").asDouble();
+                }
+            }
+        }
+        return null;
     }
 
     private static JsonNode item(JsonNode modelCaps, String name) {

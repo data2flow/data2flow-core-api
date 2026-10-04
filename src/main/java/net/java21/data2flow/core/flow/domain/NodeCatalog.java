@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 노드 카탈로그(API-FLW-30, FLW-01.02). M3 기본 노드(트리거·조건·변환·지속·제어·디버그 16종)를 {@code classpath:flow/node-types.json}에
+ * 노드 카탈로그(API-FLW-30, FLW-01.02). M3 기본 노드 16종 + M4 9종(알람·알림·변화율·무수신·복합·이상·Sink·상태 머신·알람 트리거)를 {@code classpath:flow/node-types.json}에
  * 둔다(contracts {@code flow-node-type.v1.json} 모양). flow-engine 노드 레지스트리는 같은 종류·포트·설정 필드를 구현해야 하고, 저장·적용
  * 검증과 편집기 팔레트·설정 폼이 이 목록을 쓴다.
  */

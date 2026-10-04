@@ -1,0 +1,1 @@
+{"name":"고온","scope":{"type":"DEVICE","ids":["17","18"]},"condition":{"kind":"threshold","metric":"temperature","op":">=","value":28,"for":"10m"},"severity":"MINOR","titleTemplate":"{{device.name}} 고온"}

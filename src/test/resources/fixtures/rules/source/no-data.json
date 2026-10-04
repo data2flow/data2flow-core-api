@@ -1,0 +1,1 @@
+{"name":"무수신 30분","scope":{"type":"SPACE","ids":["1"]},"condition":{"kind":"noData","window":"PT30M"},"severity":"MAJOR","titleTemplate":"{{device.name}} 무수신"}

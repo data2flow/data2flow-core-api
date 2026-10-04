@@ -23,9 +23,14 @@ public class InternalControlController {
     private final CapabilityService capabilities;
     private final ControlSettingsService settings;
     private final InternalOrganizations organizations;
+    private final net.java21.data2flow.core.control.service.SafetyService safety;
+    private final net.java21.data2flow.core.control.service.SceneService scenes;
 
     public InternalControlController(ControlInternalService service, CapabilityService capabilities, ControlSettingsService settings,
-                                     InternalOrganizations organizations) {
+                                     InternalOrganizations organizations, net.java21.data2flow.core.control.service.SafetyService safety,
+                                     net.java21.data2flow.core.control.service.SceneService scenes) {
+        this.safety = safety;
+        this.scenes = scenes;
         this.service = service;
         this.capabilities = capabilities;
         this.settings = settings;
@@ -55,5 +60,36 @@ public class InternalControlController {
     public ApiResponse<SandboxSpaces> sandbox(@RequestParam(required = false) Long organizationId) {
         return ApiResponse.success(service.sandbox(organizationId == null ? organizations.deploymentOrganizations()
                 : java.util.List.of(organizations.resolve(organizationId))));
+    }
+
+    /** API-ACT-44 기기에 걸리는 켜진 인터락 */
+    @GetMapping("/internal/core/devices/{device-id}/interlocks")
+    public ItemsResponse<java.util.Map<String, Object>> interlocks(@PathVariable("device-id") long deviceId) {
+        ControlProfileResponse profile = service.profile(deviceId);
+        return ItemsResponse.of(safety.interlocksForDevice(Long.parseLong(profile.organizationId()), deviceId));
+    }
+
+    /** API-ACT-45 측정값(at 이전 마지막, 공간이면 측정 기기 평균). 없으면 404 */
+    @GetMapping("/internal/core/metric-values")
+    public ApiResponse<java.util.Map<String, Object>> metricValue(@RequestParam String metric, @RequestParam(required = false) Long deviceId,
+                                                                  @RequestParam(required = false) Long spaceId,
+                                                                  @RequestParam(required = false)
+                                                                  @org.springframework.format.annotation.DateTimeFormat(iso =
+                                                                          org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME)
+                                                                  java.time.Instant at) {
+        return ApiResponse.success(safety.metricValue(metric, deviceId, spaceId, at));
+    }
+
+    /** API-ACT-46 배포 조직의 진행 중 비상 정지 */
+    @GetMapping("/internal/core/emergency-stops")
+    public ItemsResponse<java.util.Map<String, Object>> emergencyStops(@RequestParam(required = false) Long organizationId) {
+        return ItemsResponse.of(safety.activeStops(organizationId == null ? organizations.deploymentOrganizations()
+                : java.util.List.of(organizations.resolve(organizationId))));
+    }
+
+    /** API-ACT-47 장면 정의 */
+    @GetMapping("/internal/core/scenes/{scene-id}")
+    public ApiResponse<java.util.Map<String, Object>> scene(@PathVariable("scene-id") long sceneId) {
+        return ApiResponse.success(scenes.internal(sceneId));
     }
 }

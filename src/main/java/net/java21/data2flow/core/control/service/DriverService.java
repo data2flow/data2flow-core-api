@@ -168,8 +168,13 @@ public class DriverService {
     public JsonNode healthcheck(long driverId) {
         roleChecker.require(Permission.DRIVER_MANAGE);
         long orgId = roleChecker.currentUser().organizationId();
-        require(orgId, driverId);
-        JsonNode result = action.healthcheck(driverId);
+        var driver = require(orgId, driverId);
+        java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("type", driver.type());
+        body.put("config", json.readTree(driver.config()));
+        drivers.findSecret(orgId, driverId).ifPresent(enc -> body.put("secrets", json.readTree(new String(cipher.decryptBytes(enc,
+                "data2flow_core.drivers.secret:" + driverId), StandardCharsets.UTF_8))));
+        JsonNode result = action.healthcheck(driverId, body);
         boolean ok = result != null && result.path("ok").asBoolean(false);
         drivers.updateStatus(orgId, driverId, ok ? "OK" : "ERROR", clock.instant());
         if (!ok) {

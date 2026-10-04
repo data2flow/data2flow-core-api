@@ -87,7 +87,8 @@ public class FlowRepository {
     }
 
     public long countRunning(long organizationId) {
-        return jdbc.sql("SELECT count(*) FROM data2flow_core.flows WHERE organization_id = :org AND status IN ('ACTIVE', 'PAUSED', 'DEGRADED')")
+        return jdbc.sql("SELECT count(*) FROM data2flow_core.flows WHERE organization_id = :org AND status IN ('ACTIVE', 'PAUSED', 'DEGRADED')"
+                        + " AND kind <> 'RULE'")
                 .param("org", organizationId).query(Long.class).single();
     }
 
@@ -101,6 +102,38 @@ public class FlowRepository {
                 .param("id", id).param("org", organizationId).param("name", name).param("description", description)
                 .param("env", environment).param("draft", draftVersion).param("spaces", Pg.bigintArray(relatedSpaceIds))
                 .param("user", userId).param("now", Pg.ts(now)).update();
+    }
+
+    /** 규칙의 내부 플로우(kind=RULE, ADR-005). 규칙 행보다 먼저 만들고 {@link #linkRule}로 잇는다(서로 참조하는 FK) */
+    public void insertRuleFlow(UUID id, long organizationId, String name, List<Long> relatedSpaceIds, long userId, Instant now) {
+        jdbc.sql("""
+                        INSERT INTO data2flow_core.flows (id, organization_id, name, kind, status, environment, draft_version, related_space_ids,
+                               owner_user_id, created_by, updated_by, created_at, updated_at)
+                        VALUES (:id, :org, :name, 'FLOW', 'DRAFT', 'PROD', NULL, CAST(:spaces AS bigint[]), :user, :user, :user, :now, :now)""")
+                .param("id", id).param("org", organizationId).param("name", name).param("spaces", Pg.bigintArray(relatedSpaceIds))
+                .param("user", userId).param("now", Pg.ts(now)).update();
+    }
+
+    public void linkRule(long organizationId, UUID flowId, long ruleId) {
+        jdbc.sql("UPDATE data2flow_core.flows SET kind = 'RULE', source_rule_id = :rule WHERE organization_id = :org AND id = :id")
+                .param("rule", ruleId).param("org", organizationId).param("id", flowId).update();
+    }
+
+    /** 규칙을 플로우로 변환(BR-RUL-24): kind=FLOW, 원래 규칙 ID는 남긴다 */
+    public void updateKind(long organizationId, UUID flowId, String kind, long userId, Instant now) {
+        jdbc.sql("""
+                        UPDATE data2flow_core.flows SET kind = :kind, version = version + 1, updated_by = :user, updated_at = :now
+                         WHERE organization_id = :org AND id = :id""")
+                .param("kind", kind).param("user", userId).param("now", Pg.ts(now)).param("org", organizationId).param("id", flowId)
+                .update();
+    }
+
+    public void updateRuleFlowName(long organizationId, UUID flowId, String name, List<Long> relatedSpaceIds) {
+        jdbc.sql("""
+                        UPDATE data2flow_core.flows SET name = :name, related_space_ids = CAST(:spaces AS bigint[])
+                         WHERE organization_id = :org AND id = :id""")
+                .param("name", name).param("spaces", Pg.bigintArray(relatedSpaceIds)).param("org", organizationId).param("id", flowId)
+                .update();
     }
 
     public void updateDraftVersion(long organizationId, UUID flowId, Integer draftVersion, long userId, Instant now) {

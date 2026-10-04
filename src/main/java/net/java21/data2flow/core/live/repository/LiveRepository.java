@@ -141,4 +141,10 @@ public class LiveRepository {
         }
         return names;
     }
+
+    /** 알람 제목(웹 알림 SSE) */
+    public java.util.Optional<String> findAlarmTitle(long organizationId, long alarmId) {
+        return jdbc.sql("SELECT title FROM data2flow_core.alarms WHERE organization_id = :org AND id = :id")
+                .param("org", organizationId).param("id", alarmId).query(String.class).optional();
+    }
 }

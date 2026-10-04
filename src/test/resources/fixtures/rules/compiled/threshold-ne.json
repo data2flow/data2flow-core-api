@@ -1,0 +1,60 @@
+{
+  "schema" : "data2flow.flow-definition/v1",
+  "mode" : {
+    "concurrency" : "queued",
+    "keyBy" : "deviceId",
+    "max" : 10
+  },
+  "nodes" : [ {
+    "id" : "n-trigger-1",
+    "type" : "trigger.telemetry",
+    "name" : "측정값",
+    "config" : {
+      "target" : {
+        "deviceIds" : [ "5" ]
+      },
+      "metrics" : [ "mode" ]
+    }
+  }, {
+    "id" : "n-condition",
+    "type" : "condition.threshold",
+    "name" : "mode != 2",
+    "config" : {
+      "metric" : "mode",
+      "op" : "!=",
+      "value" : 2
+    }
+  }, {
+    "id" : "n-alarm-raise",
+    "type" : "action.alarm",
+    "name" : "알람 발생",
+    "config" : {
+      "mode" : "raise",
+      "ruleId" : "42",
+      "severity" : "INFO",
+      "title" : "모드",
+      "targetBy" : "device"
+    }
+  }, {
+    "id" : "n-alarm-clear",
+    "type" : "action.alarm",
+    "name" : "알람 해제",
+    "config" : {
+      "mode" : "clear",
+      "ruleId" : "42",
+      "targetBy" : "device"
+    }
+  } ],
+  "wires" : [ {
+    "from" : "n-trigger-1",
+    "to" : "n-condition"
+  }, {
+    "from" : "n-condition",
+    "port" : "true",
+    "to" : "n-alarm-raise"
+  }, {
+    "from" : "n-condition",
+    "port" : "false",
+    "to" : "n-alarm-clear"
+  } ]
+}

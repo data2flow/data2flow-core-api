@@ -1,0 +1,1 @@
+{"name":"공간 평균 고온","scope":{"type":"SPACE","ids":["31"]},"condition":{"kind":"threshold","metric":"temperature","op":">","value":27,"for":"PT5M","clear":26,"aggregate":"spaceAvg"},"severity":"MAJOR","titleTemplate":"평균 고온","autoClear":true}

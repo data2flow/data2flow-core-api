@@ -1,0 +1,1 @@
+{"name":"범위 밖","scope":{"type":"SPACE","ids":["31","32"],"includeChildren":false},"condition":{"kind":"threshold","metric":"humidity","op":"outside","range":[30,70],"for":"PT15M"},"severity":"MINOR","titleTemplate":"습도 이상"}

@@ -5,7 +5,9 @@ import net.java21.data2flow.contracts.authz.PermissionLookup;
 import net.java21.data2flow.contracts.authz.SpaceScope;
 import net.java21.data2flow.contracts.message.CanonicalTelemetry;
 import net.java21.data2flow.contracts.message.DomainEvent;
+import net.java21.data2flow.contracts.message.event.AlarmStateChanged;
 import net.java21.data2flow.contracts.message.event.CommandStatusChanged;
+import net.java21.data2flow.contracts.message.event.NotificationDeliveryResult;
 import net.java21.data2flow.contracts.message.event.DeviceChanged;
 import net.java21.data2flow.contracts.message.event.DeviceStateChanged;
 import net.java21.data2flow.contracts.message.event.DeviceConnectivityChanged;
@@ -65,7 +67,7 @@ import java.util.concurrent.TimeUnit;
  *   <li>{@link #ingestTick()} 5초: {@code ingest-stats}</li>
  *   <li>{@link #pollMessages()} 1초: 원본 메시지 폴링 → {@code message}(초당 20건 상한)</li>
  * </ul>
- * {@code Last-Event-ID}로 다시 보내 주는(재생) 이벤트는 M2에 없다: 알림(notifications)은 M5이고, 홈은 다시 연결하면 처음에 전체 요약을
+ * {@code Last-Event-ID}로 다시 보내 주는(재생) 이벤트는 아직 없다: 알림 센터(DSH-10.01)는 M7이고, 홈은 다시 연결하면 처음에 전체 요약을
  * 보내며, 텔레메트리는 최신값부터다(API-DSH-20). 그래서 이벤트에 {@code id:}를 달지 않는다.
  */
 @Component
@@ -216,6 +218,9 @@ public class LiveHub implements SmartLifecycle {
             case SourceConnectionChanged p -> sourceState(targets, p);
             case CommandStatusChanged p -> commandStatus(org, targets, p);
             case DeviceStateChanged p -> actuatorState(org, targets, p);
+            case AlarmStateChanged p -> alarmState(event.type(), targets, p);
+            case NotificationDeliveryResult p -> webNotification(org, targets, p);
+            case net.java21.data2flow.contracts.message.event.EmergencyStopChanged p -> emergency(event.type(), targets, p);
             default -> log.trace("실시간 화면이 쓰지 않는 이벤트 {}", event.type());
         }
     }
@@ -294,7 +299,92 @@ public class LiveHub implements SmartLifecycle {
     private void refreshSubscriptions(Collection<LiveConnection> targets) {
         for (LiveConnection c : targets) {
             if (c.isOpen()) {
-                c.subscription(subscriptions.resolve(c.organizationId(), c.subscription().grant(), c.topics()));
+                c.subscription(resolve(c, c.subscription().grant()));
+            }
+        }
+    }
+
+    /** 다시 판정. 알람 전용 스트림(API-RUL-14)은 ALARM_READ가 남아 있을 때만 유지 */
+    private Subscription resolve(LiveConnection c, AccessGrant grant) {
+        if (c.subscription().alarmStream()) {
+            return grant.has(net.java21.data2flow.contracts.authz.Permission.ALARM_READ) ? Subscription.alarmStream(grant)
+                    : Subscription.empty(grant);
+        }
+        return subscriptions.resolve(c.organizationId(), grant, c.topics());
+    }
+
+    /**
+     * EVT-RUL-02 알람 상태 → {@code alarms} 토픽 {@code alarm}({alarmId, state, severity, spaceId, title}, API-DSH-20)과 알람 전용 스트림
+     * {@code alarm.raised|updated|cleared}(Alarm 요약, API-RUL-14). 공간 범위 밖(공간 없는 알람은 제한 없는 사용자만)은 보내지 않는다.
+     */
+    private void alarmState(String routingKey, Collection<LiveConnection> targets, AlarmStateChanged p) {
+        var a = p.alarm();
+        Long spaceId = a.space() == null ? null : a.space().id();
+        String topicBody = null;
+        String streamBody = null;
+        String event = switch (routingKey) {
+            case "alarm.raised" -> "alarm.raised";
+            case "alarm.cleared" -> "alarm.cleared";
+            default -> "alarm.updated";
+        };
+        for (LiveConnection c : targets) {
+            Subscription s = c.subscription();
+            if (!c.isOpen() || (!s.alarms() && !s.alarmStream())) {
+                continue;
+            }
+            var scope = s.grant().spaceScope();
+            if (!scope.unrestricted() && (spaceId == null || !scope.includes(spaceId))) {
+                continue;
+            }
+            if (s.alarms()) {
+                topicBody = topicBody != null ? topicBody : write(new LiveDtos.AlarmTopic(Long.toString(a.id()), a.status().name(),
+                        a.severity().name(), spaceId == null ? null : Long.toString(spaceId), a.title(), routingKey));
+                c.send("alarm", topicBody);
+            }
+            if (s.alarmStream()) {
+                streamBody = streamBody != null ? streamBody : write(a);
+                c.send(event, streamBody);
+            }
+        }
+    }
+
+    /** EVT-ACT-03 비상 정지 시작·해제 → 조직의 모든 연결에 {@code emergency-stop}(전역 배너, ACT-06.03 "5초 안 배너") */
+    private void emergency(String routingKey, Collection<LiveConnection> targets, net.java21.data2flow.contracts.message.event.EmergencyStopChanged p) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("id", Long.toString(p.id()));
+        body.put("state", routingKey.endsWith("released") ? "RELEASED" : "STARTED");
+        body.put("scope", p.scope());
+        body.put("reason", p.reason());
+        body.put("at", p.at());
+        String text = write(body);
+        for (LiveConnection c : targets) {
+            if (c.isOpen()) {
+                c.send("emergency-stop", text);
+            }
+        }
+    }
+
+    /** EVT-RUL-04 웹 알림(channel=WEB, SENT) → 받는 사용자 본인의 {@code notifications} 토픽 {@code notification} */
+    private void webNotification(long org, Collection<LiveConnection> targets, NotificationDeliveryResult p) {
+        if (!"WEB".equals(p.channel()) || p.status() != net.java21.data2flow.contracts.notification.DeliveryStatus.SENT || p.recipient() == null) {
+            return;
+        }
+        String digits = p.recipient().replaceAll("[^0-9]", "");
+        if (digits.isEmpty()) {
+            return;
+        }
+        long userId;
+        try {
+            userId = Long.parseLong(digits);
+        } catch (NumberFormatException ex) {
+            return;
+        }
+        String title = p.alarmId() == null ? null : repository.findAlarmTitle(org, p.alarmId()).orElse(null);
+        String body = write(new LiveDtos.Notification(p.deliveryId().toString(), "ALARM", title,
+                p.alarmId() == null ? null : "/alarms/" + p.alarmId(), p.at(), p.alarmId() == null ? null : Long.toString(p.alarmId())));
+        for (LiveConnection c : targets) {
+            if (c.isOpen() && c.userId() == userId && c.subscription().notifications()) {
+                c.send("notification", body);
             }
         }
     }
@@ -324,7 +414,7 @@ public class LiveHub implements SmartLifecycle {
         for (LiveConnection c : List.copyOf(connections.values())) {
             if (c.isOpen()) {
                 AccessGrant grant = permissions.find(c.organizationId(), c.userId());
-                c.subscription(subscriptions.resolve(c.organizationId(), grant, c.topics()));
+                c.subscription(resolve(c, grant));
             }
         }
     }

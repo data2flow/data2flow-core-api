@@ -19,7 +19,9 @@ import java.util.regex.Pattern;
  *   <li>{@code sources} → {@code source-state}(소스 대표 연결 상태가 바뀔 때, DSC-02.01 "5초 이내 화면 반영")</li>
  *   <li>{@code ingest-messages?sourceId=&deviceId=&result=} → {@code message}(초당 최대 20건)</li>
  *   <li>{@code commands:{deviceId}} → {@code command-status}(EVT-ACT-01 명령 상태, M3 ACT-04.02)</li>
- *   <li>{@code notifications}·{@code alarms}·{@code analytics:run:{id}}: 이후 마일스톤(M4~M6)의 토픽. 받아 두지만 아직 이벤트가 없다</li>
+ *   <li>{@code alarms} → {@code alarm}(EVT-RUL-02 알람 상태 변화, ALARM_READ + 공간 범위, M4 RUL-02.06)</li>
+ *   <li>{@code notifications} → {@code notification}(본인에게 간 웹 알림, EVT-RUL-04 channel=WEB, M4 RUL-03.01)</li>
+ *   <li>{@code analytics:run:{id}}: 이후 마일스톤(M6)의 토픽. 받아 두지만 아직 이벤트가 없다</li>
  * </ul>
  */
 public sealed interface LiveTopic {
@@ -53,6 +55,14 @@ public sealed interface LiveTopic {
     record Commands(String raw, long deviceId) implements LiveTopic {
     }
 
+    /** 알람 상태 변화(ALARM_READ) */
+    record Alarms(String raw) implements LiveTopic {
+    }
+
+    /** 본인 웹 알림 */
+    record Notifications(String raw) implements LiveTopic {
+    }
+
     /** 이후 마일스톤 토픽(이벤트 없음) */
     record Future(String raw) implements LiveTopic {
     }
@@ -60,7 +70,7 @@ public sealed interface LiveTopic {
     Pattern SPACE = Pattern.compile("space:(\\d{1,18})");
     Pattern TELEMETRY = Pattern.compile("telemetry:d?(\\d{1,18})\\.([A-Za-z][A-Za-z0-9_]{0,63})");
     Pattern COMMANDS = Pattern.compile("commands:d?(\\d{1,18})");
-    Pattern FUTURE = Pattern.compile("notifications|alarms|analytics:run:\\d{1,18}");
+    Pattern FUTURE = Pattern.compile("analytics:run:\\d{1,18}");
     Pattern RESULT = Pattern.compile("[A-Z_]{1,32}");
 
     /** 쉼표로 이은 토픽 목록을 읽는다. 형식이 틀린 토픽은 {@link Parsed#invalid()}에 모은다(중복은 한 번만) */
@@ -96,6 +106,12 @@ public sealed interface LiveTopic {
         }
         if ("sources".equals(t)) {
             return new Sources(t);
+        }
+        if ("alarms".equals(t)) {
+            return new Alarms(t);
+        }
+        if ("notifications".equals(t)) {
+            return new Notifications(t);
         }
         if (FUTURE.matcher(t).matches()) {
             return new Future(t);

@@ -183,10 +183,36 @@ public class FlowApplyService {
         return new Outcome(new ApplyResult(target.versionNo(), flowService.applyStatus(orgId, after)), null);
     }
 
+    /**
+     * 규칙 저장의 내부 적용(API-RUL-02 "플로우 적용(API-FLW-07 내부 호출, 원자적 전환)"): 권한은 규칙 쪽(RULE_WRITE)에서 이미 봤고,
+     * 규칙 플로우에는 제어 노드가 없어 승인도 없다. 검증 오류면 적용하지 않고 오류 목록을 돌려준다(규칙은 ERROR(FLOW_ERROR)).
+     *
+     * @return 검증 오류(비면 적용됨)
+     */
+    @Transactional
+    public List<net.java21.data2flow.core.flow.domain.FlowValidator.Issue> applyRuleVersion(long organizationId, java.util.UUID flowId,
+                                                                                          int versionNo, long userId) {
+        flows.lockById(organizationId, flowId);
+        FlowRow flow = flows.findById(organizationId, flowId).orElseThrow(() -> new BusinessException(FlowErrorCode.FLOW_NOT_FOUND));
+        VersionRow target = versions.find(organizationId, flowId, versionNo)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.RESOURCE_NOT_FOUND));
+        JsonNode definition = support.tree(target.definition());
+        FlowValidator.Result result = support.validate(organizationId, flow.kind(), flowId, definition);
+        Instant now = clock.instant();
+        versions.updateApplyInfo(organizationId, flowId, versionNo, support.write(new Validation(result.errors(), result.warnings())), null,
+                "rule", now);
+        if (!result.ok()) {
+            return result.errors();
+        }
+        activate(flow, target, userId, now);
+        return List.of();
+    }
+
     /** 원자적 전환: 이전 ACTIVE → ARCHIVED, 대상 → ACTIVE. 실행 중 상태(PAUSED·DEGRADED)는 유지, DRAFT·DISABLED·ACTIVE는 ACTIVE */
     private void activate(FlowRow flow, VersionRow target, long userId, Instant now) {
         long orgId = flow.organizationId();
-        if (!FlowModels.RUNNING.contains(flow.status()) && flows.countRunning(orgId) >= FlowModels.MAX_ACTIVE_FLOWS) {
+        if (!"RULE".equals(flow.kind()) && !FlowModels.RUNNING.contains(flow.status())
+                && flows.countRunning(orgId) >= FlowModels.MAX_ACTIVE_FLOWS) {
             throw new BusinessException(FlowErrorCode.FLOW_LIMIT_EXCEEDED);
         }
         versions.activate(orgId, flow.id(), target.versionNo(), userId, now);

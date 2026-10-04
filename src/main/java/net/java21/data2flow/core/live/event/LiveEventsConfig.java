@@ -45,9 +45,13 @@ public class LiveEventsConfig {
                 EventType.DEVICE_PENDING_CREATED, EventType.SPACE_CHANGED, EventType.GROUP_MEMBERSHIP_CHANGED,
                 EventType.SOURCE_CONNECTION_CHANGED, EventType.INGEST_ALERT_RAISED, EventType.INGEST_ALERT_CLEARED,
                 // M3: 명령 상태(commands 토픽), 액추에이터 상태(space 토픽), 가상 환경 실행 스트림(API-SIM-31)
-                EventType.DEVICE_STATE_CHANGED, EventType.SIM_FAULT_STARTED, EventType.SIM_FAULT_ENDED));
+                EventType.DEVICE_STATE_CHANGED, EventType.SIM_FAULT_STARTED, EventType.SIM_FAULT_ENDED,
+                // M4: 알람(alarms 토픽·API-RUL-14), 웹 알림(notifications 토픽), 유지보수(홈 요약 다시 계산)
+                EventType.NOTIFICATION_DELIVERED, EventType.OPS_MAINTENANCE_STARTED, EventType.OPS_MAINTENANCE_ENDED,
+                EventType.CONTROL_EMERGENCY_STARTED, EventType.CONTROL_EMERGENCY_RELEASED));
         for (EventType type : EventType.values()) {
-            if (type.routingKey().startsWith("command.status.") || type.routingKey().startsWith(EventType.SIM_RUN_PREFIX)) {
+            if (type.routingKey().startsWith("command.status.") || type.routingKey().startsWith(EventType.SIM_RUN_PREFIX)
+                    || (type.routingKey().startsWith(EventType.ALARM_PREFIX) && type != EventType.ALARM_SIGNAL)) {
                 types.add(type);
             }
         }

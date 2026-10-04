@@ -14,14 +14,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 class NodeCatalogSchemaTest {
 
     @Test
-    @DisplayName("[FLW-01.02][FLW-08.02] 카탈로그 16종 모두 flow-node-type.v1 스키마 통과, 트리거를 포함해 마지막 출력은 error(type=error)")
+    @DisplayName("[FLW-01.02][FLW-08.02] 카탈로그 25종(M3 16 + M4 9) 모두 flow-node-type.v1 스키마 통과, 트리거를 포함해 마지막 출력은 error(type=error)")
     void everyNodeHasErrorPortAndMatchesSchema() throws Exception {
         JsonMapper json = JsonMapper.builder().build();
         JsonNode all;
         try (InputStream in = getClass().getClassLoader().getResourceAsStream(NodeCatalog.RESOURCE)) {
             all = json.readTree(in);
         }
-        assertThat(all.size()).isEqualTo(16);
+        assertThat(all.size()).isEqualTo(25);
         for (JsonNode node : all.values()) {
             MessageSchemas.assertValid(MessageSchemas.FLOW_NODE_TYPE, node);
             JsonNode outputs = node.path("outputs");
