@@ -78,7 +78,7 @@ public class AlarmEventHandler implements CoreEventHandler {
     public Set<EventType> types() {
         return Set.of(EventType.ALARM_SIGNAL, EventType.GATEWAY_CONNECTIVITY_CHANGED, EventType.CONTROL_OSCILLATION_BLOCKED,
                 EventType.DRIVER_CIRCUIT_OPENED, EventType.DRIVER_CIRCUIT_CLOSED, EventType.NOTIFICATION_DELIVERED,
-                EventType.NOTIFICATION_FAILED, EventType.COMMAND_NO_EFFECT);
+                EventType.NOTIFICATION_FAILED, EventType.COMMAND_NO_EFFECT, EventType.FLOW_STATE_CHANGED);
     }
 
     @Override
@@ -96,6 +96,7 @@ public class AlarmEventHandler implements CoreEventHandler {
             case DriverCircuitChanged d -> driver(org, d, event.eventType(), at);
             case NotificationDeliveryResult n -> delivery(org, n, at);
             case CommandNoEffect c -> noEffect(org, c, at);
+            case net.java21.data2flow.contracts.message.event.FlowStateChanged f -> flowState(org, f, at);
             default -> log.trace("처리하지 않는 이벤트 {}", event.type());
         }
     }
@@ -193,6 +194,35 @@ public class AlarmEventHandler implements CoreEventHandler {
             data.put("error", n.error());
         }
         events.insert(org, n.alarmId(), n.at() == null ? at : n.at(), "NOTIFIED", "SYSTEM", null, json.writeValueAsString(data));
+    }
+
+    /**
+     * EVT-FLW-03 엔진 판정(ADR-051): 엔진이 플로우를 멈추면(PAUSED·DEGRADED, 사유 RUNAWAY·CYCLE·DEGRADED) MAJOR
+     * {@code system:FLOW_STATE:{flowId}} 알람, ACTIVE로 돌아오거나 RECOVERED면 자동 해제. 상태 저장은 FlowEngineEvents가 한다.
+     */
+    private void flowState(long org, net.java21.data2flow.contracts.message.event.FlowStateChanged f, Instant at) {
+        UUID flowId = flowId(f.flowId());
+        if (flowId == null) {
+            return;
+        }
+        String key = AlarmKeys.system(AlarmService.FLOW_STATE, flowId.toString());
+        Instant when = f.at() == null ? at : f.at();
+        boolean recovered = "ACTIVE".equals(f.to()) || f.reason() == net.java21.data2flow.contracts.message.event.FlowStateChanged.Reason.RECOVERED;
+        if (recovered) {
+            alarms.clearByKey(org, key, null, when, AlarmClearReason.AUTO, "SYSTEM", null);
+            return;
+        }
+        if (!"PAUSED".equals(f.to()) && !"DEGRADED".equals(f.to())) {
+            return;
+        }
+        String name = alarmRepository.findFlowName(org, flowId).orElse(null);
+        if (name == null) {
+            return;
+        }
+        Double rate = f.metrics() == null ? null : f.metrics().errorRate();
+        alarms.raise(new AlarmService.Raise(org, key, AlarmSourceType.SYSTEM, null, flowId, null, AlarmSeverity.MAJOR,
+                ("PAUSED".equals(f.to()) ? "플로우 자동 정지: " : "플로우 오류 증가: ") + name + " (" + (f.reason() == null ? "UNKNOWN" : f.reason().name()) + ")",
+                null, null, null, rate, null, null, when, "SYSTEM", false, false));
     }
 
     private void noEffect(long org, CommandNoEffect c, Instant at) {

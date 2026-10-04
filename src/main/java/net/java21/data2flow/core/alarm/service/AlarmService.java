@@ -49,6 +49,7 @@ public class AlarmService {
     public static final String GATEWAY_OFFLINE = "GATEWAY_OFFLINE";
     public static final String OSCILLATION = "OSCILLATION";
     public static final String DRIVER_CIRCUIT_OPEN = "DRIVER_CIRCUIT_OPEN";
+    public static final String FLOW_STATE = "FLOW_STATE";
 
     private final AlarmRepository alarms;
     private final AlarmEventRepository events;

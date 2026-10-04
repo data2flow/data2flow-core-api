@@ -41,9 +41,12 @@ public class InternalDeviceService {
     private final DeviceAttributeService attributeService;
     private final DeploymentOrganization deployment;
     private final JsonMapper json;
+    private final net.java21.data2flow.core.device.repository.DeviceRepository devices;
 
     public InternalDeviceService(InternalDeviceRepository internal, DeviceAttributeRepository attributes,
-                                 DeviceAttributeService attributeService, DeploymentOrganization deployment, JsonMapper json) {
+                                 DeviceAttributeService attributeService, DeploymentOrganization deployment, JsonMapper json,
+                                 net.java21.data2flow.core.device.repository.DeviceRepository devices) {
+        this.devices = devices;
         this.internal = internal;
         this.attributes = attributes;
         this.attributeService = attributeService;
@@ -51,7 +54,7 @@ public class InternalDeviceService {
         this.json = json;
     }
 
-    /** API-DEV-122: TRANSFORM 스크립트(모델 → 기기 순), 서버 속성(모델 스키마 기본값 포함, DEV-07.05)·공유 속성 */
+    /** API-DEV-122: TRANSFORM 스크립트(모델 → 기기 순), 서버 속성(모델 스키마 기본값 포함, DEV-07.05)·공유 속성, 태그(M4, 트리거 태그 대상) */
     @Transactional(readOnly = true)
     public DeviceRuntimeResponse runtime(long deviceId) {
         Device device = internal.findAnyOrganization(deviceId, deployment.restriction()).filter(d -> !d.deleted())
@@ -70,7 +73,7 @@ public class InternalDeviceService {
         }
         return new DeviceRuntimeResponse(Long.toString(deviceId), Long.toString(org), DeviceViews.id(device.modelId()), device.status(),
                 device.virtual(), scripts, new RuntimeAttributes(attributeService.withDefaults(device, server), shared), Map.of(),
-                device.version());
+                device.version(), devices.findTags(org, deviceId));
     }
 
     /** API-DEV-130 변경분(updatedAfter 뒤, 변경 시각 순). status를 주지 않으면 삭제(DELETED)도 포함한다 */

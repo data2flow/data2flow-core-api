@@ -56,6 +56,9 @@ class RuleLifecycleIT extends AlarmItSupport {
         String def = jdbc.sql("SELECT definition::text FROM data2flow_core.flow_versions WHERE flow_id = CAST(:id AS uuid) AND version_no = 1")
                 .param("id", flowId).query(String.class).single();
         assertThat(def).contains("action.alarm").contains("\"ruleId\": \"" + ruleId + "\"");
+        // 컴파일은 flow-engine(API-FLW-86, ADR-051)
+        assertThat(STUB.received("POST", "/internal/flow/rules/compile")).hasSize(1).first()
+                .satisfies(c -> assertThat(c.body()).contains("\"ruleId\":\"" + ruleId + "\"").contains("\"metric\":\"co2\""));
         mvc.perform(as(org, operator, json(put("/core/rules/" + ruleId), rule("실습실 고CO2", building)
                         .replace("\"value\":1000", "\"value\":1200").replace("}\n", ",\"baseVersion\":1}\n").replace("\"autoClear\":true}",
                                 "\"autoClear\":true,\"baseVersion\":1}"))))
@@ -93,6 +96,20 @@ class RuleLifecycleIT extends AlarmItSupport {
                 .andExpect(jsonPath("$.responses[0].requiredMetrics[0]").value("co2"));
         // 범위 밖·다른 조직 공간은 404
         mvc.perform(as(org, operator, json(post("/core/rules"), rule("z", 999999)))).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("[RUL-01.01][TC-RUL-026] 엔진이 컴파일을 거절하면(400 RULE_CONDITION_INVALID) 그 오류를 그대로 돌려주고 규칙은 저장되지 않는다, 엔진 장애는 503")
+    void engineRejects() throws Exception {
+        STUB.fail("POST", "/internal/flow/rules/compile", 400, "RULE_CONDITION_INVALID",
+                "\"errors\":[{\"field\":\"condition.metric\",\"code\":\"UNSUPPORTED\",\"message\":null}]");
+        mvc.perform(as(org, operator, json(post("/core/rules"), rule("거절", lab)))).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.header.resultCode").value("RULE_CONDITION_INVALID"))
+                .andExpect(jsonPath("$.errors[0].field").value("condition.metric"));
+        assertThat(count("SELECT count(*) FROM data2flow_core.rules WHERE organization_id = :org")).isZero();
+        STUB.fail("POST", "/internal/flow/rules/compile", 500, "INTERNAL_ERROR", null);
+        mvc.perform(as(org, operator, json(post("/core/rules"), rule("장애", lab)))).andExpect(status().isServiceUnavailable());
+        assertThat(count("SELECT count(*) FROM data2flow_core.flows WHERE organization_id = :org")).isZero();
     }
 
     @Test

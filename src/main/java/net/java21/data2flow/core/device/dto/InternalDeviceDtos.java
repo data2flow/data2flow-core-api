@@ -22,7 +22,7 @@ public final class InternalDeviceDtos {
     /** API-DEV-122. metricOverrides는 M2에 원천이 없어 빈 객체(측정 항목별 보정은 TRANSFORM 스크립트·서버 속성으로 한다) */
     public record DeviceRuntimeResponse(String deviceId, String organizationId, String modelId, String status, boolean virtual,
                                         List<TransformScript> transformScripts, RuntimeAttributes attributes,
-                                        Map<String, JsonNode> metricOverrides, int version) {
+                                        Map<String, JsonNode> metricOverrides, int version, List<String> tags) {
     }
 
     /**

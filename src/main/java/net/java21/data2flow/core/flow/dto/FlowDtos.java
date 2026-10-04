@@ -99,9 +99,13 @@ public final class FlowDtos {
     public record TemplateResult(String flowId, int draftVersion, List<Issue> warnings) {
     }
 
-    /** API-FLW-80·81 내부: 엔진이 실행할 플로우(FlowRuntime, ACTIVE 버전 정의 포함) */
+    /**
+     * API-FLW-80·81 내부: 엔진이 실행할 플로우(FlowRuntime, ACTIVE 버전 정의 포함). M4(ADR-051): {@code errorRateThreshold}는 비율(0~1,
+     * 저장은 % 값 / 100), {@code autoPauseOnDegraded}, {@code catchFlowId}(없으면 null)
+     */
     public record RuntimeFlow(String flowId, String organizationId, String name, String kind, String status, int activeVersion,
-                              int rateLimitPerSec, String pauseMode, JsonNode definition, Overlay overlay) {
+                              int rateLimitPerSec, String pauseMode, JsonNode definition, Overlay overlay, double errorRateThreshold,
+                              boolean autoPauseOnDegraded, String catchFlowId) {
     }
 
     /** API-FLW-80 응답 */

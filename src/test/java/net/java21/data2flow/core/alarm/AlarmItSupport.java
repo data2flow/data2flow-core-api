@@ -30,6 +30,35 @@ public abstract class AlarmItSupport extends LoopItSupport {
     @org.springframework.beans.factory.annotation.Autowired
     protected net.java21.data2flow.core.alarm.service.AutomationJobs jobs;
 
+    /** 가짜 flow-engine 규칙 컴파일(API-FLW-86) */
+    @BeforeEach
+    void engineCompiler() {
+        STUB.on("POST", "/internal/flow/rules/compile", r -> {
+            var mapper = codec.mapper();
+            var body = mapper.readTree(r.body());
+            var rule = body.path("rule");
+            List<String> ids = new java.util.ArrayList<>();
+            rule.path("scope").path("ids").forEach(n -> ids.add(n.asString()));
+            var input = new net.java21.data2flow.core.rule.domain.FakeEngineRuleCompiler.Input(body.path("ruleId").asLong(),
+                    rule.path("name").asString(), rule.path("scope").path("type").asString(), ids,
+                    rule.path("scope").path("includeChildren").asBoolean(true), rule.get("condition"),
+                    rule.get("timeCondition") == null || rule.get("timeCondition").isNull() ? null : rule.get("timeCondition"),
+                    rule.path("severity").asString(), rule.path("titleTemplate").asString(), rule.path("autoClear").asBoolean(true));
+            tools.jackson.databind.node.ObjectNode definition;
+            try {
+                definition = net.java21.data2flow.core.rule.domain.FakeEngineRuleCompiler.compile(input, mapper);
+            } catch (IllegalArgumentException ex) {
+                return new net.java21.data2flow.core.support.StubHttpServer.Reply(400, "{\"header\":{\"isSuccessful\":false,"
+                        + "\"resultCode\":\"RULE_CONDITION_INVALID\",\"resultMessage\":\"x\"},\"errors\":[{\"field\":\"rule.condition.kind\","
+                        + "\"code\":\"UNSUPPORTED\",\"message\":null}]}", java.util.Map.of());
+            }
+            String json = "{\"definition\":" + mapper.writeValueAsString(definition) + ",\"target\":\""
+                    + ("SPACE".equals(rule.path("scope").path("type").asString()) ? "SPACE" : "DEVICE") + "\"}";
+            return new net.java21.data2flow.core.support.StubHttpServer.Reply(200,
+                    net.java21.data2flow.core.support.StubHttpServer.success(json), java.util.Map.of());
+        });
+    }
+
     @BeforeEach
     void alarmFixtures() {
         site = data.site(org, "캠퍼스");

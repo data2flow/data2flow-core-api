@@ -21,7 +21,11 @@ public enum FlowErrorCode implements ErrorCode {
     /** API-FLW-50 쓰는 플로우가 있는 Sink 연결 삭제 */
     SINK_CONNECTION_IN_USE(409),
     /** API-FLW-51 연결 테스트 실패(원인 AUTH·DNS·TLS·TIMEOUT·REFUSED·OTHER) */
-    SINK_CONNECTION_TEST_FAILED(502);
+    SINK_CONNECTION_TEST_FAILED(502),
+    /** API-FLW-12 시험 입력이 표준 메시지가 아니거나 원본 메시지에서 텔레메트리를 만들 수 없음 */
+    FLOW_TEST_INPUT_INVALID(400),
+    /** API-FLW-13 재생 기간 7일 초과·100만 건 초과 */
+    FLOW_REPLAY_TOO_LARGE(400);
 
     private final int httpStatus;
 

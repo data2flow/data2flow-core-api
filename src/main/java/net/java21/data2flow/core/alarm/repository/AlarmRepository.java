@@ -413,6 +413,12 @@ public class AlarmRepository {
                 .optional();
     }
 
+    /** 플로우 이름(엔진 판정 알람 제목). 삭제된 플로우는 없음 */
+    public Optional<String> findFlowName(long organizationId, UUID flowId) {
+        return jdbc.sql("SELECT name FROM data2flow_core.flows WHERE organization_id = :org AND id = :id AND status <> 'DELETED'")
+                .param("org", organizationId).param("id", flowId).query(String.class).optional();
+    }
+
     /** 게이트웨이 아래 기기(마지막 수신 게이트웨이가 그 EUI인 같은 소스 기기) */
     public List<Long> listDevicesUnderGateway(long organizationId, long sourceId, String gatewayEui) {
         return jdbc.sql("""

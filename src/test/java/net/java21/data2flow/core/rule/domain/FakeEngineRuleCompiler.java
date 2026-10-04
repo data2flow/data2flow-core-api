@@ -11,19 +11,19 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * 규칙 → 표준 플로우 컴파일(BR-RUL-01, ADR-005). 규칙 버전 하나가 플로우 버전 하나가 된다(1:1). 결과는 결정적이다(같은 규칙 = 같은 JSON,
- * 골든 파일 {@code fixtures/rules/compiled/*.json}, TC-RUL-002).
+ * 시험용 가짜 flow-engine 규칙 컴파일러(API-FLW-86 {@code POST /internal/flow/rules/compile}의 대역). 규칙 컴파일은 노드 의미를 아는
+ * flow-engine이 맡고(ADR-051) core는 결과 정의를 저장·적용만 한다. 이 클래스는 core 통합 시험에서 엔진 응답을 흉내 내기 위한 것이다.
  *
  * <pre>
  * trigger.telemetry(범위마다 1개) → [condition.timeWindow] → [transform.aggregate(공간 집계)] → 조건 노드 ─참→ action.alarm(raise)
  *                                                                                             └거짓→ action.alarm(clear, autoClear일 때)
  * </pre>
  * 조건 노드: threshold → {@code condition.threshold}(for·clear·repeat), rateOfChange → {@code condition.rateOfChange},
- * noData → {@code condition.noData}(timeout → 발생, resumed → 해제), anomaly → {@code detect.anomaly}(anomaly → 발생, normal → 해제),
- * group → {@code condition.composite}(AND/OR 항목을 그대로, 참/거짓). 알림은 플로우에 넣지 않는다: 알람 서비스가 상태 변화마다 정책을 평가해
+ * noData → {@code condition.noData}(timeout → 발생, restored → 해제), anomaly는 거절(엔진과 같음),
+ * group → {@code condition.group}(AND/OR 항목을 그대로, 참/거짓). 알림은 플로우에 넣지 않는다: 알람 서비스가 상태 변화마다 정책을 평가해
  * 알림을 요청한다(EVT-RUL-03, core-api). 알람 키는 엔진이 {@code rule:{ruleId}:{기기 ID 또는 space-공간 ID}}로 만든다(AlarmKeys).
  */
-public final class RuleCompiler {
+public final class FakeEngineRuleCompiler {
 
     public static final String SCHEMA = "data2flow.flow-definition/v1";
     static final String RAISE = "n-alarm-raise";
@@ -33,7 +33,7 @@ public final class RuleCompiler {
     static final String AGGREGATE = "n-aggregate";
     static final List<String> DAYS = List.of("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN");
 
-    private RuleCompiler() {
+    private FakeEngineRuleCompiler() {
     }
 
     /**
@@ -126,20 +126,13 @@ public final class RuleCompiler {
                 copyText(c, cfg, "metric");
                 cfg.put("window", iso(c.path("window").asString()));
                 raisePort = "timeout";
-                clearPort = "resumed";
+                clearPort = "restored";
             }
             case "anomaly" -> {
-                cond = node(nodes, CONDITION, "detect.anomaly", RuleCondition.summary(c));
-                ObjectNode cfg = cond.putObject("config");
-                copyText(c, cfg, "metric");
-                cfg.put("method", c.path("method").asString("zscore"));
-                cfg.set("threshold", c.get("minScore"));
-                copyText(c, cfg, "analysisId");
-                raisePort = "anomaly";
-                clearPort = "normal";
+                throw new IllegalArgumentException("anomaly는 엔진이 아직 컴파일하지 않습니다(ADR-051)");
             }
             default -> {
-                cond = node(nodes, CONDITION, "condition.composite", RuleCondition.summary(c));
+                cond = node(nodes, CONDITION, "condition.group", RuleCondition.summary(c));
                 ObjectNode cfg = cond.putObject("config");
                 cfg.put("op", c.path("op").asString("AND").toUpperCase(Locale.ROOT));
                 cfg.set("items", normalize(c.path("items"), json));

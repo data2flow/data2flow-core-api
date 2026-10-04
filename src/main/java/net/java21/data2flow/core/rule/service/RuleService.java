@@ -21,7 +21,6 @@ import net.java21.data2flow.core.flow.repository.FlowRepository.FlowRow;
 import net.java21.data2flow.core.flow.repository.FlowVersionRepository;
 import net.java21.data2flow.core.flow.service.FlowApplyService;
 import net.java21.data2flow.core.flow.service.FlowSupport;
-import net.java21.data2flow.core.rule.domain.RuleCompiler;
 import net.java21.data2flow.core.rule.domain.RuleCondition;
 import net.java21.data2flow.core.rule.domain.RuleErrorCode;
 import net.java21.data2flow.core.rule.domain.RuleLimits;
@@ -63,7 +62,7 @@ import java.util.UUID;
 /**
  * 규칙 CRUD·상태·변환(RUL-01·06, API-RUL-01~05·07, BR-RUL-01·06·20·21·24).
  *
- * <p>저장 = 규칙 행 → 표준 플로우 컴파일({@link RuleCompiler}) → 내부 플로우(kind=RULE)의 새 버전 → 원자적 적용. 규칙 버전과 플로우 버전은
+ * <p>저장 = 규칙 행 → 표준 플로우 컴파일(flow-engine API-FLW-86, ADR-051) → 내부 플로우(kind=RULE)의 새 버전 → 원자적 적용. 규칙 버전과 플로우 버전은
  * 같은 번호다(1:1). 적용이 검증에서 실패하면 규칙은 ERROR(FLOW_ERROR), 대상 기기가 0대면 ERROR(NO_TARGET)로 저장하고 플로우는 그대로 적용한다
  * (범위에 기기가 들어오면 자동으로 대상이 된다, BR-RUL-06).
  */
@@ -85,10 +84,12 @@ public class RuleService {
     private final Audits audits;
     private final JsonMapper json;
     private final Clock clock;
+    private final net.java21.data2flow.core.flow.service.FlowEngineClient engine;
 
     public RuleService(RuleRepository rules, FlowRepository flows, FlowVersionRepository versions, FlowApplyService apply,
                        FlowSupport flowSupport, AlarmRepository alarmRepository, AlarmService alarms, RoleChecker roleChecker,
-                       Audits audits, JsonMapper json, Clock clock) {
+                       Audits audits, JsonMapper json, Clock clock, net.java21.data2flow.core.flow.service.FlowEngineClient engine) {
+        this.engine = engine;
         this.rules = rules;
         this.flows = flows;
         this.versions = versions;
@@ -236,14 +237,35 @@ public class RuleService {
                 current.flowId().toString(), outcome.warnings());
     }
 
+    /** API-FLW-86 {@code rule} = API-RUL-02 요청 모양 */
+    Map<String, Object> compileRequest(RuleInput in) {
+        Map<String, Object> rule = new LinkedHashMap<>();
+        rule.put("name", in.name());
+        rule.put("templateKey", in.templateKey());
+        Map<String, Object> scope = new LinkedHashMap<>();
+        scope.put("type", in.scopeType());
+        scope.put("ids", in.scopeIds());
+        scope.put("includeChildren", in.includeChildren());
+        rule.put("scope", scope);
+        rule.put("condition", in.condition());
+        rule.put("timeCondition", in.timeCondition());
+        rule.put("severity", in.severity());
+        rule.put("titleTemplate", in.titleTemplate());
+        rule.put("autoClear", in.autoClear());
+        return rule;
+    }
+
     /** 결과 상태·사유·경고 */
     public record Outcome(String status, String reason, List<Warning> warnings) {
     }
 
     /** 컴파일 → 플로우 새 버전(번호 = 규칙 버전) → 적용. 적용 실패면 ERROR(FLOW_ERROR), 대상 0대면 ERROR(NO_TARGET) */
     Outcome compileAndApply(long orgId, long ruleId, int version, UUID flowId, RuleInput in, int targetCount, long userId, boolean applyNow) {
-        ObjectNode definition = RuleCompiler.compile(new RuleCompiler.Input(ruleId, in.name(), in.scopeType(), in.scopeIds(),
-                in.includeChildren(), in.condition(), in.timeCondition(), in.severity(), in.titleTemplate(), in.autoClear()), json);
+        JsonNode compiled = engine.compileRule(orgId, ruleId, compileRequest(in));
+        JsonNode definition = compiled == null ? null : compiled.get("definition");
+        if (definition == null || !definition.isObject()) {
+            throw new BusinessException(CommonErrorCode.SERVICE_UNAVAILABLE);
+        }
         String raw = json.writeValueAsString(definition);
         Instant now = clock.instant();
         int versionNo = Math.max(version, versions.maxVersionNo(orgId, flowId) + 1);

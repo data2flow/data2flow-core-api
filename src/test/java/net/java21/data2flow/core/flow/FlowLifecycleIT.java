@@ -190,11 +190,11 @@ class FlowLifecycleIT extends FlowItSupport {
     }
 
     @Test
-    @DisplayName("[FLW-01.02][API-FLW-30][API-FLW-14] 노드 카탈로그(설정 스키마·포트·제어 노드 권한), 지표는 flow-engine 내부 API로 중계, 엔진 지표 없음·장애는 503 FLOW_METRICS_UNAVAILABLE — TC-FLW-282")
+    @DisplayName("[FLW-01.02][API-FLW-30][API-FLW-14] 노드 카탈로그(설정 스키마·포트·제어 노드 권한), 지표는 flow-engine 내부 API로 중계, 엔진 장애만 503 FLOW_METRICS_UNAVAILABLE — TC-FLW-282")
     void catalogAndMetrics() throws Exception {
         mvc.perform(as(org, viewer, get("/core/flow-nodes"))).andExpect(status().isForbidden());
         mvc.perform(as(org, analyst, get("/core/flow-nodes")))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.totalCount").value(16))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalCount").value(22))
                 .andExpect(jsonPath("$.responses[?(@.type=='action.control')].permissions[0]").value("FLOW_DEPLOY_CONTROL"))
                 .andExpect(jsonPath("$.responses[?(@.type=='condition.threshold')].outputs[1].name").value("false"));
         String flowId = create(operator, "지표", monitorOnly(lab));
@@ -205,10 +205,9 @@ class FlowLifecycleIT extends FlowItSupport {
         assertThat(STUB.received("GET", ".*/metrics").getFirst().query()).isEqualTo("window=24h&step=1h");
         mvc.perform(as(org, analyst, get("/core/flows/" + flowId + "/metrics").param("window", "30d"))).andExpect(status().isBadRequest());
         mvc.perform(as(org, analyst, get("/core/flows/" + flowId + "/metrics").param("step", "5m"))).andExpect(status().isBadRequest());
-        // FLW-05.05(M4) 전: 엔진에 지표 경로가 없거나(404) 엔진 장애(5xx)면 503 FLOW_METRICS_UNAVAILABLE
+        // M4(ADR-051): 엔진 응답(404 포함)은 그대로 중계하고, 엔진 장애(5xx·연결 실패)만 503 FLOW_METRICS_UNAVAILABLE
         String noMetrics = create(operator, "지표 없음", monitorOnly(lab));
-        mvc.perform(as(org, analyst, get("/core/flows/" + noMetrics + "/metrics")))
-                .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.header.resultCode").value("FLOW_METRICS_UNAVAILABLE"));
+        mvc.perform(as(org, analyst, get("/core/flows/" + noMetrics + "/metrics"))).andExpect(status().isNotFound());
         STUB.on("GET", "/internal/flow/flows/" + noMetrics + "/metrics", r -> new StubHttpServer.Reply(500, "", java.util.Map.of()));
         mvc.perform(as(org, analyst, get("/core/flows/" + noMetrics + "/metrics")))
                 .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.header.resultCode").value("FLOW_METRICS_UNAVAILABLE"));

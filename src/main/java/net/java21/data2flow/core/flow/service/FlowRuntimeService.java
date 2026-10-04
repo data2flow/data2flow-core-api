@@ -4,7 +4,6 @@ import net.java21.data2flow.contracts.authz.Permission;
 import net.java21.data2flow.contracts.authz.RoleChecker;
 import net.java21.data2flow.contracts.error.BusinessException;
 import net.java21.data2flow.contracts.error.CommonErrorCode;
-import net.java21.data2flow.core.common.RelayedErrorException;
 import net.java21.data2flow.core.flow.domain.FlowErrorCode;
 import net.java21.data2flow.core.flow.domain.FlowModels;
 import net.java21.data2flow.core.flow.dto.FlowDtos.Overlay;
@@ -51,8 +50,8 @@ public class FlowRuntimeService {
     }
 
     /**
-     * API-FLW-14 지표 — FLOW_READ. window 1h(기본)·24h·7d, step 1m(기본)·1h. 엔진 지표 API(FLW-05.05)는 M4라서 엔진에 경로가 없거나
-     * 엔진이 응답하지 않으면 503 {@code FLOW_METRICS_UNAVAILABLE}(화면은 "지표 없음"으로 표시)
+     * API-FLW-14 지표 — FLOW_READ. window 1h(기본)·24h·7d, step 1m(기본)·1h. 엔진 응답을 그대로 중계하고(엔진의 4xx 오류도 그대로),
+     * 엔진이 내려가 응답하지 않을 때만 503 {@code FLOW_METRICS_UNAVAILABLE}(화면은 "지표 없음"으로 표시, ADR-051)
      */
     public JsonNode metrics(String flowId, String window, String step) {
         roleChecker.require(Permission.FLOW_READ);
@@ -67,13 +66,8 @@ public class FlowRuntimeService {
         }
         try {
             return engine.metrics(flow.id(), w, s);
-        } catch (RelayedErrorException ex) {
-            if (ex.status() == 404) {
-                throw new BusinessException(FlowErrorCode.FLOW_METRICS_UNAVAILABLE);   // 엔진에 경로가 아직 없음(FLW-05.05 M4)
-            }
-            throw ex;
         } catch (BusinessException ex) {
-            if (ex.getErrorCode() == CommonErrorCode.RESOURCE_NOT_FOUND || ex.getErrorCode() == CommonErrorCode.SERVICE_UNAVAILABLE) {
+            if (ex.getErrorCode() == CommonErrorCode.SERVICE_UNAVAILABLE) {
                 throw new BusinessException(FlowErrorCode.FLOW_METRICS_UNAVAILABLE);
             }
             throw ex;
@@ -109,6 +103,8 @@ public class FlowRuntimeService {
         Overlay overlay = runtime.findOverlay(f.organizationId(), f.id()).map(o -> new Overlay(o.bypass(), o.debug(), o.revision()))
                 .orElse(new Overlay(List.of(), List.of(), 0));
         return new RuntimeFlow(f.id().toString(), Long.toString(f.organizationId()), f.name(), f.kind(), f.status(), f.activeVersion(),
-                v.rateLimitPerSec(), f.pauseMode(), support.tree(v.definition()), overlay);
+                v.rateLimitPerSec(), f.pauseMode(), support.tree(v.definition()), overlay,
+                f.errorRateThreshold() == null ? 0.1 : f.errorRateThreshold().doubleValue() / 100.0, f.autoPauseOnDegraded(),
+                f.catchFlowId() == null ? null : f.catchFlowId().toString());
     }
 }

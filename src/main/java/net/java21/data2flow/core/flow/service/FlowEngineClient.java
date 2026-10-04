@@ -45,4 +45,38 @@ public class FlowEngineClient {
         return http.call(HttpMethod.GET, "/internal/flow/flows/" + flowId + "/metrics", InternalHttp.query("window", window, "step", step),
                 null);
     }
+
+    /** API-FLW-86 규칙 → 표준 플로우 {organizationId, ruleId, rule} → {definition, target}. 바꿀 수 없으면 엔진의 400 RULE_CONDITION_INVALID */
+    public JsonNode compileRule(long organizationId, long ruleId, java.util.Map<String, Object> rule) {
+        java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("organizationId", Long.toString(organizationId));
+        body.put("ruleId", Long.toString(ruleId));
+        body.put("rule", rule);
+        return http.call(HttpMethod.POST, "/internal/flow/rules/compile", null, body);
+    }
+
+    /** API-FLW-12 → {@code POST /internal/flow/test-runs} → {trace} */
+    public JsonNode testRun(java.util.Map<String, Object> body) {
+        return http.call(HttpMethod.POST, "/internal/flow/test-runs", null, body);
+    }
+
+    /** API-FLW-13 → {@code POST /internal/flow/replays} → 202 {jobId, status} */
+    public JsonNode replay(java.util.Map<String, Object> body) {
+        return http.call(HttpMethod.POST, "/internal/flow/replays", null, body);
+    }
+
+    /** API-FLW-13 → {@code GET /internal/flow/replays/{job-id}} */
+    public JsonNode replayJob(String jobId) {
+        return http.call(HttpMethod.GET, "/internal/flow/replays/" + jobId, null, null);
+    }
+
+    /** API-FLW-13 → {@code POST /internal/flow/replays/{job-id}/cancel} */
+    public JsonNode cancelReplay(String jobId) {
+        return http.call(HttpMethod.POST, "/internal/flow/replays/" + jobId + "/cancel", null, java.util.Map.of());
+    }
+
+    /** API-FLW-41 → {@code GET /internal/flow/traces/{message-id}?flowId=} */
+    public JsonNode trace(String messageId, UUID flowId) {
+        return http.call(HttpMethod.GET, "/internal/flow/traces/" + messageId, InternalHttp.query("flowId", flowId.toString()), null);
+    }
 }
