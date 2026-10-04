@@ -4,7 +4,8 @@ import net.java21.data2flow.contracts.idempotency.Idempotent;
 import net.java21.data2flow.contracts.web.ApiResponse;
 import net.java21.data2flow.contracts.identity.DataflowHeaders;
 import net.java21.data2flow.core.common.InternalHttp;
-import net.java21.data2flow.core.common.ItemsResponse;
+import net.java21.data2flow.contracts.web.ListApiResponse;
+import net.java21.data2flow.contracts.web.PageParams;
 import net.java21.data2flow.core.control.dto.SafetyDtos;
 import net.java21.data2flow.core.control.service.ActionClient;
 import net.java21.data2flow.core.control.service.SafetyService;
@@ -61,8 +62,9 @@ public class AutomationControlController {
     // ------------------------------------------------------------------ 장면(API-ACT-10~12)
 
     @GetMapping("/core/scenes")
-    public ItemsResponse<SafetyDtos.Scene> scenes() {
-        return ItemsResponse.of(scenes.list());
+    public ListApiResponse<SafetyDtos.Scene> scenes(@RequestParam(required = false) Integer page,
+                                                      @RequestParam(required = false) Integer size) {
+        return page(scenes.list(), page, size);
     }
 
     @PostMapping("/core/scenes")
@@ -107,15 +109,16 @@ public class AutomationControlController {
     // ------------------------------------------------------------------ 예약(API-ACT-15)
 
     @GetMapping("/core/control-schedules")
-    public ItemsResponse<SafetyDtos.Schedule> schedules() {
-        return ItemsResponse.of(schedules.list());
+    public ListApiResponse<SafetyDtos.Schedule> schedules(@RequestParam(required = false) Integer page,
+                                                      @RequestParam(required = false) Integer size) {
+        return page(schedules.list(), page, size);
     }
 
     @PostMapping("/core/control-schedules")
     @Idempotent
     public ResponseEntity<ApiResponse<SafetyDtos.Schedule>> createSchedule(@RequestBody JsonNode body) {
         SafetyDtos.Schedule s = schedules.create(body);
-        return ResponseEntity.created(URI.create("/api/v1/core/control-schedules/" + s.id())).body(ApiResponse.success(s));
+        return ResponseEntity.created(URI.create("/api/v1/core/control-schedules/" + s.controlScheduleId())).body(ApiResponse.success(s));
     }
 
     @PutMapping("/core/control-schedules/{control-schedule-id}")
@@ -142,8 +145,9 @@ public class AutomationControlController {
     // ------------------------------------------------------------------ 인터락(API-ACT-16)
 
     @GetMapping("/core/interlocks")
-    public ItemsResponse<SafetyDtos.Interlock> interlocks() {
-        return ItemsResponse.of(safety.interlocks());
+    public ListApiResponse<SafetyDtos.Interlock> interlocks(@RequestParam(required = false) Integer page,
+                                                      @RequestParam(required = false) Integer size) {
+        return page(safety.interlocks(), page, size);
     }
 
     @PostMapping("/core/interlocks")
@@ -181,7 +185,7 @@ public class AutomationControlController {
     @PostMapping("/core/emergency-stops")
     public ResponseEntity<ApiResponse<SafetyDtos.EmergencyStop>> stop(@RequestBody JsonNode body) {
         SafetyDtos.EmergencyStop s = safety.start(body);
-        return ResponseEntity.created(URI.create("/api/v1/core/emergency-stops/" + s.id())).body(ApiResponse.success(s));
+        return ResponseEntity.created(URI.create("/api/v1/core/emergency-stops/" + s.emergencyStopId())).body(ApiResponse.success(s));
     }
 
     @PostMapping("/core/emergency-stops/{emergency-stop-id}/release")
@@ -190,8 +194,10 @@ public class AutomationControlController {
     }
 
     @GetMapping("/core/emergency-stops")
-    public ItemsResponse<SafetyDtos.EmergencyStop> stops(@RequestParam(required = false) Boolean active) {
-        return ItemsResponse.of(safety.stops(active));
+    public ListApiResponse<SafetyDtos.EmergencyStop> stops(@RequestParam(required = false) Boolean active,
+                                                           @RequestParam(required = false) Integer page,
+                                                           @RequestParam(required = false) Integer size) {
+        return page(safety.stops(active), page, size);
     }
 
     // ------------------------------------------------------------------ 가동·효과(API-ACT-35)
@@ -205,5 +211,12 @@ public class AutomationControlController {
 
     private static ResponseEntity<ApiResponse<JsonNode>> relay(InternalHttp.Result r) {
         return ResponseEntity.status(r.status()).body(ApiResponse.success(r.response()));
+    }
+
+    /** 목록은 api-rules 오프셋 모양(page 1부터, size 기본 20 최대 100). 조직당 수가 작아 메모리에서 자른다 */
+    static <T> ListApiResponse<T> page(java.util.List<T> all, Integer page, Integer size) {
+        PageParams p = PageParams.of(page, size);
+        int from = (int) Math.min(all.size(), p.offset());
+        return ListApiResponse.of(p, all.subList(from, (int) Math.min(all.size(), from + (long) p.size())), all.size());
     }
 }

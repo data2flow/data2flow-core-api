@@ -171,7 +171,7 @@ public class SinkConnectionService {
         return tested(null, action.call(HttpMethod.POST, "/internal/action/sinks/connections/test", null, req));
     }
 
-    @Transactional
+    /** 저장된 연결 테스트. 결과 상태(OK·ERROR)는 실패해도 남아야 하므로 트랜잭션으로 묶지 않는다 */
     public JsonNode test(long id) {
         roleChecker.require(Permission.SINK_CONNECTION_MANAGE);
         long orgId = roleChecker.currentUser().organizationId();

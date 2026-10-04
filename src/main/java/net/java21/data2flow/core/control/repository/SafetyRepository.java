@@ -102,12 +102,16 @@ public class SafetyRepository {
     // ------------------------------------------------------------------ 비상 정지
 
     public record StopRow(long id, long organizationId, String scope, String reason, long startedBy, Instant startedAt, Long releasedBy,
-                          Instant releasedAt, String releaseNote) {
+                          Instant releasedAt, String releaseNote, String startedByName, String releasedByName) {
     }
 
     static final String STOP = """
-            SELECT id, organization_id, scope::text AS scope, reason, started_by, started_at, released_by, released_at, release_note
-              FROM data2flow_core.emergency_stops""";
+            SELECT id, organization_id, scope::text AS scope, reason, started_by, started_at, released_by, released_at, release_note,
+                   (SELECT u.name FROM data2flow_core.app_users u WHERE u.id = e.started_by AND u.organization_id = e.organization_id)
+                       AS started_by_name,
+                   (SELECT u.name FROM data2flow_core.app_users u WHERE u.id = e.released_by AND u.organization_id = e.organization_id)
+                       AS released_by_name
+              FROM data2flow_core.emergency_stops e""";
 
     public List<StopRow> listStops(long organizationId, boolean activeOnly, int limit) {
         return jdbc.sql(STOP + " WHERE organization_id = :org AND (NOT :active OR released_at IS NULL) ORDER BY started_at DESC, id DESC LIMIT :limit")
@@ -148,7 +152,7 @@ public class SafetyRepository {
     static StopRow stop(ResultSet rs, int n) throws SQLException {
         return new StopRow(rs.getLong("id"), rs.getLong("organization_id"), rs.getString("scope"), rs.getString("reason"),
                 rs.getLong("started_by"), Pg.instant(rs, "started_at"), Pg.longOrNull(rs, "released_by"), Pg.instant(rs, "released_at"),
-                rs.getString("release_note"));
+                rs.getString("release_note"), rs.getString("started_by_name"), rs.getString("released_by_name"));
     }
 
     // ------------------------------------------------------------------ 측정값(API-ACT-45)

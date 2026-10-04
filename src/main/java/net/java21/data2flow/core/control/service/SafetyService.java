@@ -336,8 +336,10 @@ public class SafetyService {
     }
 
     SafetyDtos.EmergencyStop stopView(StopRow r) {
-        return new SafetyDtos.EmergencyStop(Long.toString(r.id()), json.readTree(r.scope()), r.reason(), Long.toString(r.startedBy()),
-                r.startedAt(), r.releasedBy() == null ? null : Long.toString(r.releasedBy()), r.releasedAt(), r.releaseNote(), null);
+        return new SafetyDtos.EmergencyStop(Long.toString(r.id()), json.readTree(r.scope()), r.reason(),
+                new SafetyDtos.UserRef(Long.toString(r.startedBy()), r.startedByName()), r.startedAt(),
+                r.releasedBy() == null ? null : new SafetyDtos.UserRef(Long.toString(r.releasedBy()), r.releasedByName()), r.releasedAt(),
+                r.releaseNote(), r.releasedAt() == null);
     }
 
     static long parseId(String raw, String field) {

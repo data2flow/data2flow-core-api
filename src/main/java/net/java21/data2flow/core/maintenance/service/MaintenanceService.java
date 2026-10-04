@@ -116,7 +116,9 @@ public class MaintenanceService {
         Instant now = clock.instant();
         switch (w.status()) {
             case "ACTIVE" -> {
-                windows.updateStatus(w.organizationId(), id, "ENDED", now, user.userId(), now);
+                // 시작과 같은 시각에 끝내도 기간(끝 > 시작) 제약을 지킨다
+                Instant endsAt = now.isAfter(w.startsAt()) ? now : w.startsAt().plusMillis(1);
+                windows.updateStatus(w.organizationId(), id, "ENDED", endsAt, user.userId(), now);
                 ended(w, now);
             }
             case "SCHEDULED" -> windows.updateStatus(w.organizationId(), id, "CANCELED", null, user.userId(), now);

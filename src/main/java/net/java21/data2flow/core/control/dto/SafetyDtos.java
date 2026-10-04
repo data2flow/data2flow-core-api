@@ -18,8 +18,12 @@ public final class SafetyDtos {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record EmergencyStop(String id, JsonNode scope, String reason, String startedBy, Instant startedAt, String releasedBy,
-                                Instant releasedAt, String releaseNote, Integer cancelledCommands) {
+    public record EmergencyStop(String emergencyStopId, JsonNode scope, String reason, UserRef startedBy, Instant startedAt, UserRef releasedBy,
+                                Instant releasedAt, String releaseNote, boolean active) {
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record UserRef(String userId, String name) {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -28,7 +32,7 @@ public final class SafetyDtos {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record Schedule(String id, String name, JsonNode target, String kind, Instant at, String cron, JsonNode spaceHours,
+    public record Schedule(String controlScheduleId, String name, JsonNode target, String kind, Instant at, String cron, JsonNode spaceHours,
                            String validFrom, String validTo, boolean skipHolidays, String timezone, boolean enabled, Instant nextRunAt,
                            JsonNode lastRun, int version, Instant updatedAt) {
     }
