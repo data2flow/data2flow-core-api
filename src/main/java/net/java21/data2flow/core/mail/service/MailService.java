@@ -1,17 +1,16 @@
 package net.java21.data2flow.core.mail.service;
 
-import net.java21.data2flow.core.branding.dto.BrandingDtos.MailBranding;
-import net.java21.data2flow.core.branding.service.BrandingService;
-import org.springframework.beans.factory.ObjectProvider;
-
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import net.java21.data2flow.contracts.secret.Secret;
 import net.java21.data2flow.contracts.secret.SecretCipher;
+import net.java21.data2flow.core.branding.dto.BrandingDtos.MailBranding;
+import net.java21.data2flow.core.branding.service.BrandingService;
 import net.java21.data2flow.core.extservice.repository.ExternalServiceRepository;
 import net.java21.data2flow.core.extservice.repository.ExternalServiceRepository.ExternalServiceRow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.MessageSource;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
