@@ -50,7 +50,7 @@ public class DriverService {
     static final String AUDIT_DELETED = "DRIVER_DELETED";
     static final String AUDIT_LINKED = "MODEL_DRIVER_LINKED";
     private static final String DEFAULT_RETRY = "{\"maxAttempts\":3,\"initialMs\":1000,\"multiplier\":2,\"maxMs\":10000}";
-    private static final String DEFAULT_CIRCUIT = "{\"failureRate\":0.5,\"windowSec\":60,\"openSec\":30}";
+    private static final String DEFAULT_CIRCUIT = "{\"failureRate\":50,\"windowSec\":60,\"openSec\":30}";
 
     private final DriverRepository drivers;
     private final CapabilityService capabilities;

@@ -35,7 +35,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @Import(TestBeans.class)
 public abstract class IntegrationTestSupport {
 
-    protected static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18-alpine");
+    // 문맥(캐시)마다 커넥션 풀이 생기므로 기본 100개로는 모자랄 수 있다(실제 서버 포트 문맥 FlowLiveViewIT 포함)
+    protected static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18-alpine")
+            .withCommand("postgres", "-c", "max_connections=300");
     protected static final RabbitMQContainer RABBIT = new RabbitMQContainer("rabbitmq:3.13-management");
     protected static final GreenMail MAIL = new GreenMail(ServerSetupTest.SMTP.dynamicPort());
     protected static final AuthStubServer AUTH = new AuthStubServer();
