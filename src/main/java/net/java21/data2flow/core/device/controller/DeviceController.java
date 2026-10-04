@@ -9,6 +9,7 @@ import net.java21.data2flow.contracts.error.FieldErrorDetail;
 import net.java21.data2flow.contracts.idempotency.Idempotent;
 import net.java21.data2flow.contracts.web.ApiResponse;
 import net.java21.data2flow.contracts.web.ListApiResponse;
+import net.java21.data2flow.core.common.CountedListResponse;
 import net.java21.data2flow.core.device.dto.DeviceDtos.ApproveRequest;
 import net.java21.data2flow.core.device.dto.DeviceDtos.ApproveResponse;
 import net.java21.data2flow.core.device.dto.DeviceDtos.BaseVersionRequest;
@@ -60,9 +61,9 @@ public class DeviceController {
         this.imports = imports;
     }
 
-    /** API-DEV-11 목록(DEV-02.01, IAM-04.06) — DEV_READ, 200 */
+    /** API-DEV-11 목록(DEV-02.01, IAM-04.06)·API-DEV-133 검색식(DEV-13.03, q가 검색식이면 counts{total, tookMs}) — DEV_READ, 200 */
     @GetMapping("/core/devices")
-    public ListApiResponse<DeviceSummaryResponse> list(@RequestParam(required = false) String q,
+    public CountedListResponse<DeviceSummaryResponse> list(@RequestParam(required = false) String q,
                                                        @RequestParam(required = false) List<String> status,
                                                        @RequestParam(required = false) List<String> connectivity,
                                                        @RequestParam(required = false) List<String> kind,
@@ -80,7 +81,7 @@ public class DeviceController {
         // sort=필드,방향 은 쉼표가 들어 있어 List 변환이 쪼개므로 원래 값들을 읽는다
         String[] sorts = request.getParameterValues("sort");
         List<String> sort = sorts == null ? null : List.of(sorts);
-        return service.list(new ListQuery(q, status, connectivity, kind, modelId, spaceId, includeDescendants, sourceId, tag, groupId,
+        return service.search(new ListQuery(q, status, connectivity, kind, modelId, spaceId, includeDescendants, sourceId, tag, groupId,
                 virtual, onboarding, sort), page, size);
     }
 

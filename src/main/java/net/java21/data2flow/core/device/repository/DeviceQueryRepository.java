@@ -66,6 +66,11 @@ public class DeviceQueryRepository {
         return jdbc.sql("SELECT count(*)" + FROM + where.sql).params(where.params).query(Long.class).single();
     }
 
+    /** 이 트랜잭션의 문장 시간 제한(검색식 BR-DEV-35: 5초). 트랜잭션이 끝나면 풀린다 */
+    public void setStatementTimeout(int millis) {
+        jdbc.sql("SELECT set_config('statement_timeout', :ms, true)").param("ms", Integer.toString(millis)).query(String.class).single();
+    }
+
     /** 조건에 맞는 기기 ID(그룹 미리 보기·동적 그룹 계산) */
     public List<Long> listIds(DeviceFilter filter, int limit) {
         Where where = where(filter);
@@ -184,6 +189,10 @@ public class DeviceQueryRepository {
         if (f.allowedSpaceIds() != null) {
             sql.append(" AND d.space_id = ANY(CAST(:allowed AS bigint[]))");
             p.put("allowed", Pg.bigintArray(f.allowedSpaceIds()));
+        }
+        if (f.expression() != null) {
+            sql.append(" AND (").append(f.expression().sql()).append(')');
+            p.putAll(f.expression().params());
         }
         if (f.updatedAfter() != null) {
             sql.append(" AND d.updated_at > :updatedAfter");

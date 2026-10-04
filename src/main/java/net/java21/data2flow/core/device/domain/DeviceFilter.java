@@ -11,10 +11,25 @@ import java.util.Set;
  * @param virtual null이면 실제·가상 모두
  * @param onboarding INCOMPLETE·COMPLETE 또는 null
  * @param updatedAfter 내부 캐시 예열(API-DEV-130)용
+ * @param expression 기기 검색식 조건(DEV-13.03, API-DEV-133). 없으면 null
  */
 public record DeviceFilter(long organizationId, String q, List<String> statuses, List<String> connectivities, List<String> kinds,
                            Long modelId, Long spaceId, boolean includeDescendants, Long sourceId, List<String> tags, Long groupId,
-                           Boolean virtual, String onboarding, Set<Long> allowedSpaceIds, Instant updatedAfter) {
+                           Boolean virtual, String onboarding, Set<Long> allowedSpaceIds, Instant updatedAfter,
+                           SqlCondition expression) {
+
+    public DeviceFilter(long organizationId, String q, List<String> statuses, List<String> connectivities, List<String> kinds,
+                        Long modelId, Long spaceId, boolean includeDescendants, Long sourceId, List<String> tags, Long groupId,
+                        Boolean virtual, String onboarding, Set<Long> allowedSpaceIds, Instant updatedAfter) {
+        this(organizationId, q, statuses, connectivities, kinds, modelId, spaceId, includeDescendants, sourceId, tags, groupId, virtual,
+                onboarding, allowedSpaceIds, updatedAfter, null);
+    }
+
+    /** 검색식 조건을 붙인 사본 */
+    public DeviceFilter withExpression(SqlCondition condition) {
+        return new DeviceFilter(organizationId, q, statuses, connectivities, kinds, modelId, spaceId, includeDescendants, sourceId, tags,
+                groupId, virtual, onboarding, allowedSpaceIds, updatedAfter, condition);
+    }
 
     public DeviceFilter {
         statuses = statuses == null ? List.of() : List.copyOf(statuses);
@@ -26,6 +41,6 @@ public record DeviceFilter(long organizationId, String q, List<String> statuses,
 
     /** 조직 전체(내부·그룹 계산용) */
     public static DeviceFilter all(long organizationId) {
-        return new DeviceFilter(organizationId, null, null, null, null, null, null, true, null, null, null, null, null, null, null);
+        return new DeviceFilter(organizationId, null, null, null, null, null, null, true, null, null, null, null, null, null, null, null);
     }
 }
