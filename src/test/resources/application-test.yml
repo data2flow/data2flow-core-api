@@ -3,6 +3,10 @@
 spring:
   datasource:
     url: jdbc:postgresql://localhost:1/never-used
+    # 시험 문맥이 여럿 캐시되므로 문맥마다 연결을 적게(내보내기 동기 실행 + 요청 + 주기 작업이면 충분)
+    hikari:
+      maximum-pool-size: 6
+      minimum-idle: 1
   rabbitmq:
     host: localhost
     port: 1
