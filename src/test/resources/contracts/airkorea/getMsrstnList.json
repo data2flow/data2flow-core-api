@@ -1,0 +1,5 @@
+{"response":{"body":{"totalCount":3,"items":[
+{"stationName":"치평동","addr":"광주 서구 상무대로 1101","year":"2001","mangName":"도시대기","item":"SO2, CO, O3, NO2, PM10, PM2.5","dmX":"35.152692","dmY":"126.849728","stationCode":"336121"},
+{"stationName":"농성동","addr":"광주 서구 화운로 82","year":"1999","mangName":"도시대기","item":"SO2, CO, O3, NO2, PM10, PM2.5","dmX":"35.153037","dmY":"126.889042","stationCode":"336111"},
+{"stationName":"중구","addr":"서울 중구 덕수궁길 15","year":"1995","mangName":"도시대기","item":"SO2, CO, O3, NO2, PM10, PM2.5","dmX":"37.564639","dmY":"126.975961","stationCode":"111121"}],
+"pageNo":1,"numOfRows":1000},"header":{"resultMsg":"NORMAL_CODE","resultCode":"00"}}}

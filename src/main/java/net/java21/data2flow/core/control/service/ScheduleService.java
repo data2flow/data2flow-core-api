@@ -48,7 +48,8 @@ import java.util.Map;
  * 예약을 {@code FOR UPDATE SKIP LOCKED}로 한 파드만 잡아(배포 조직만) 행동 요청을 {@code data2flow.actions}(라우팅 키 command) 아웃박스에
  * 쓴다. 출처는 SCHEDULE(우선순위 SCHEDULE, 비상 정지 중이면 action이 SKIPPED). 장면 대상은 kind=SCENE {sceneId}, 기기 대상은 COMMAND.
  * 멱등 키 {@code sha256("schedule", id, 예정 시각)}이라 다시 돌아도 한 번만 실행된다. SCHEDULE_MANAGE.
- * 휴일 제외(skipHolidays)는 조직 달력(DEV-12, M5)이 생기기 전까지 판정할 수 없어 실행하고 {@code lastRun.holidayCheck=UNAVAILABLE}로 남긴다.
+ * 휴일 제외(skipHolidays)는 조직 달력(DEV-12.01)으로 예정 시각의 날짜(예약 시간대)를 판정해 휴일이면 보내지 않고 {@code lastRun.status=SKIPPED}
+ * ({@code holidayCheck=HOLIDAY}), 아니면 {@code holidayCheck=WORKDAY}로 남긴다(M5).
  */
 @Service
 public class ScheduleService {
@@ -64,9 +65,11 @@ public class ScheduleService {
     private final JdbcClient jdbc;
     private final JsonMapper json;
     private final Clock clock;
+    private final net.java21.data2flow.core.calendar.service.HolidayLookup holidays;
 
     public ScheduleService(SceneScheduleRepository schedules, SafetyRepository safety, OutboxWriter outbox, MessageCodec codec,
-                           RoleChecker roleChecker, Audits audits, JdbcClient jdbc, JsonMapper json, Clock clock) {
+                           RoleChecker roleChecker, Audits audits, JdbcClient jdbc, JsonMapper json, Clock clock,
+                           net.java21.data2flow.core.calendar.service.HolidayLookup holidays) {
         this.schedules = schedules;
         this.safety = safety;
         this.outbox = outbox;
@@ -76,6 +79,7 @@ public class ScheduleService {
         this.jdbc = jdbc;
         this.json = json;
         this.clock = clock;
+        this.holidays = holidays;
     }
 
     @Transactional(readOnly = true)
@@ -148,6 +152,21 @@ public class ScheduleService {
         for (ScheduleRow s : schedules.lockDue(organizations, now, 100)) {
             Instant planned = s.nextRunAt();
             JsonNode target = json.readTree(s.target());
+            String holidayCheck = null;
+            if (s.skipHolidays()) {
+                boolean holiday = holidays.isHoliday(s.organizationId(), scheduleSpace(s, target),
+                        java.time.LocalDate.ofInstant(planned, zone(s.timezone())));
+                holidayCheck = holiday ? "HOLIDAY" : "WORKDAY";
+                if (holiday) {
+                    Map<String, Object> skipped = new LinkedHashMap<>();
+                    skipped.put("at", now.toString());
+                    skipped.put("plannedAt", planned.toString());
+                    skipped.put("status", "SKIPPED");
+                    skipped.put("holidayCheck", holidayCheck);
+                    schedules.updateRun(s.organizationId(), s.id(), next(s.organizationId(), s, now), json.writeValueAsString(skipped));
+                    continue;
+                }
+            }
             String key = ActionIdempotencyKeys.of("schedule", Long.toString(s.id()), Long.toString(planned.getEpochSecond()));
             CommandSource source = CommandSource.schedule(s.id());
             ActionRequest req;
@@ -167,14 +186,26 @@ public class ScheduleService {
             last.put("plannedAt", planned.toString());
             last.put("status", "SENT");
             last.put("messageId", req.messageId().toString());
-            if (s.skipHolidays()) {
-                last.put("holidayCheck", "UNAVAILABLE");
+            if (holidayCheck != null) {
+                last.put("holidayCheck", holidayCheck);
             }
             // 멈춰 있던 동안 놓친 회차는 한 번만 실행하고 다음은 지금 이후로(밀린 실행을 몰아서 하지 않음)
             schedules.updateRun(s.organizationId(), s.id(), next(s.organizationId(), s, now), json.writeValueAsString(last));
             sent++;
         }
         return sent;
+    }
+
+    /** 휴일 판정 공간: 공간 운영 시간 기준 예약이면 그 공간, 기기 대상이면 기기 공간, 장면은 조직 전체(null) */
+    private Long scheduleSpace(ScheduleRow s, JsonNode target) {
+        JsonNode sh = s.spaceHours() == null ? null : json.readTree(s.spaceHours());
+        if (sh != null && sh.path("spaceId").asLong(0) > 0) {
+            return sh.path("spaceId").asLong();
+        }
+        if (target.hasNonNull("deviceId")) {
+            return safety.findDeviceSpace(s.organizationId(), target.get("deviceId").asLong()).filter(id -> id > 0).orElse(null);
+        }
+        return null;
     }
 
     Instant next(long orgId, ScheduleRow s, Instant after) {

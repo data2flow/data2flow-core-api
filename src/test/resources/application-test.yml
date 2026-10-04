@@ -29,3 +29,10 @@ data2flow:
 logging:
   level:
     net.java21.data2flow: INFO
+# M5 외부 맥락: 실제 공공 API에 붙지 않는다(닫힌 포트). iCal은 대역 HTTP 서버(http://)를 쓰므로 http 허용
+data2flow.core.external:
+  kma-base-url: http://127.0.0.1:1/kma
+  airkorea-base-url: http://127.0.0.1:1/airkorea
+  holiday-base-url: http://127.0.0.1:1/holiday
+  ical-allow-http: true
+  http-timeout: 3s

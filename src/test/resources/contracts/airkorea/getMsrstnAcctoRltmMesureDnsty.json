@@ -1,0 +1,3 @@
+{"response":{"body":{"totalCount":24,"items":[
+{"so2Grade":"1","coFlag":null,"khaiValue":"61","so2Value":"0.003","coValue":"0.4","pm10Flag":null,"o3Grade":"2","pm10Value":"35","khaiGrade":"2","pm25Value":"21","no2Flag":null,"no2Grade":"1","o3Flag":null,"pm25Grade":"2","so2Flag":null,"dataTime":"2020-11-25 13:00","coGrade":"1","no2Value":"0.019","pm10Grade":"1","o3Value":"0.021"}],
+"pageNo":1,"numOfRows":1},"header":{"resultMsg":"NORMAL_CODE","resultCode":"00"}}}
