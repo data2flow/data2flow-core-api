@@ -98,6 +98,17 @@ class SourceDomainTest {
     }
 
     @Test
+    @DisplayName("[ACT-03.03][DSC-01.01] MQTT 구독 소스는 ingress 옵션 downlinkAck(불리언)를 받는다 — 문자열이면 400")
+    void mqttDownlinkAck() {
+        SourceConfigValidator ok = SourceConfigValidator.start();
+        ok.connection("MQTT_SUBSCRIBE", JSON.readTree("{\"url\":\"wss://broker.example.com/mqtt\",\"downlinkAck\":true}"), false);
+        assertThat(ok.errors()).isEmpty();
+        SourceConfigValidator bad = SourceConfigValidator.start();
+        bad.connection("MQTT_SUBSCRIBE", JSON.readTree("{\"url\":\"wss://broker.example.com/mqtt\",\"downlinkAck\":\"yes\"}"), false);
+        assertThat(bad.errors()).extracting(FieldErrorDetail::field).containsExactly("connection.downlinkAck");
+    }
+
+    @Test
     @DisplayName("[DSC-09.01][BR-DSC-22] 스키마 검증: type·required·additionalProperties·enum·const·pattern·길이·범위·배열")
     void jsonSchema() {
         JsonNode schema = JSON.readTree("""

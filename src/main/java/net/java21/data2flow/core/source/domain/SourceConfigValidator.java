@@ -32,7 +32,7 @@ public final class SourceConfigValidator {
 
     public static final Set<String> MQTT_KEYS = Set.of("url", "clientIdBase", "protocolVersion", "qos", "keepaliveSec", "cleanStart",
             "sessionExpirySec", "receiveMaximum", "sharedGroup", "retainHandling", "auth", "username", "headerName", "headerScheme",
-            "tlsInsecure", "tls");
+            "tlsInsecure", "tls", "downlinkAck");
     /** Webhook 수신(DSC-01.03, ingress WebhookConnector 설정과 같은 이름) */
     public static final Set<String> WEBHOOK_KEYS = Set.of("sourceKey", "toleranceSec", "idHeader", "topic");
     public static final Pattern WEBHOOK_SOURCE_KEY = Pattern.compile("[A-Za-z0-9_-]{16,64}");
@@ -129,6 +129,9 @@ public final class SourceConfigValidator {
         longRange(c, "sessionExpirySec", 0, 4294967295L);
         intRange(c, "receiveMaximum", 1, 65535);
         bool(c, "cleanStart");
+        // ChirpStack 다운링크 결과 구독(ACT-03.03, ingress MqttSourceSettings): true면 업링크 토픽마다 event/ack·txack을 더 구독만 한다.
+        // ChirpStack 업링크 토픽이 없는 소스에서 켜면 ingress가 설정 오류로 거부한다
+        bool(c, "downlinkAck");
         String shared = text(c, "sharedGroup");
         if (shared != null && !shared.isEmpty()) {
             if (!SHARED_GROUP.matcher(shared).matches()) {
