@@ -12,8 +12,6 @@ import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Clock;
 import java.util.ArrayList;
@@ -30,7 +28,7 @@ import java.util.TreeSet;
  * <ul>
  *   <li>형식 오류·모르는 스키마 버전 → 다시 시도하지 않고 DLQ({@code core.events.dlq})</li>
  *   <li>처리기 예외 → 롤백 후 다시 받음(Quorum delivery-limit 5회 넘으면 DLQ)</li>
- *   <li>이 코드가 모르는 종류·처리기가 없는 종류 → 무시(ACK)</li>
+ *   <li>이 코드가 모르는 종류(계약 모듈에 없는 라우팅 키)·처리기가 없는 종류 → 무시(ACK)</li>
  *   <li>배포 조직({@link DeploymentOrganization}) 밖 조직의 이벤트 → 무시</li>
  * </ul>
  */
@@ -42,19 +40,14 @@ public class CoreEventConsumer {
     private static final Logger log = LoggerFactory.getLogger(CoreEventConsumer.class);
 
     private final Map<EventType, List<CoreEventHandler>> handlers = new EnumMap<>(EventType.class);
-    private final List<RawEventHandler> rawHandlers;
     private final MessageCodec codec;
     private final ProcessedMessageRepository processed;
     private final DeploymentOrganization deployment;
     private final TransactionTemplate tx;
-    private final JsonMapper json;
     private final Clock clock;
 
-    public CoreEventConsumer(List<CoreEventHandler> handlerBeans, List<RawEventHandler> rawHandlers, MessageCodec codec,
-                             ProcessedMessageRepository processed, DeploymentOrganization deployment, PlatformTransactionManager txManager,
-                             JsonMapper json, Clock clock) {
-        this.rawHandlers = List.copyOf(rawHandlers);
-        this.json = json;
+    public CoreEventConsumer(List<CoreEventHandler> handlerBeans, MessageCodec codec, ProcessedMessageRepository processed,
+                             DeploymentOrganization deployment, PlatformTransactionManager txManager, Clock clock) {
         for (CoreEventHandler h : handlerBeans) {
             for (EventType type : h.types()) {
                 handlers.computeIfAbsent(type, t -> new ArrayList<>()).add(h);
@@ -71,7 +64,6 @@ public class CoreEventConsumer {
     public Set<String> routingKeys() {
         Set<String> keys = new TreeSet<>();
         handlers.keySet().forEach(t -> keys.add(t.routingKey()));
-        rawHandlers.forEach(h -> keys.addAll(h.bindings()));
         return keys;
     }
 
@@ -86,7 +78,8 @@ public class CoreEventConsumer {
             event = codec.readEvent(body);
         } catch (MessageFormatException ex) { // UnsupportedSchemaVersionException 포함
             if (ex.getMessage() != null && ex.getMessage().startsWith("모르는 이벤트 종류")) {
-                return onRawMessage(body, ex);
+                log.debug("모르는 이벤트 종류라 무시합니다: {}", ex.getMessage());
+                return false;
             }
             throw new AmqpRejectAndDontRequeueException("core.events 형식 오류", ex);
         }
@@ -100,43 +93,6 @@ public class CoreEventConsumer {
             }
             for (CoreEventHandler h : targets) {
                 h.handle(event);
-            }
-            return true;
-        });
-        return Boolean.TRUE.equals(done);
-    }
-
-    /** 계약 모듈에 없는 종류: 처리기가 있으면 봉투를 JSON으로 읽어 처리, 없으면 무시(ACK) */
-    private boolean onRawMessage(byte[] body, MessageFormatException cause) {
-        JsonNode tree;
-        try {
-            tree = json.readTree(body);
-        } catch (tools.jackson.core.JacksonException ex) {
-            throw new AmqpRejectAndDontRequeueException("core.events 형식 오류", ex);
-        }
-        String type = tree.path("type").asString("");
-        List<RawEventHandler> targets = rawHandlers.stream().filter(h -> h.supports(type)).toList();
-        if (targets.isEmpty()) {
-            log.debug("모르는 이벤트 종류라 무시합니다: {}", cause.getMessage());
-            return false;
-        }
-        JsonNode messageId = tree.get("messageId");
-        JsonNode org = tree.get("organizationId");
-        JsonNode payload = tree.get("payload");
-        if (tree.path("v").asInt(0) != 1 || messageId == null || !messageId.isString() || org == null || !org.canConvertToLong()
-                || payload == null || !payload.isObject()) {
-            throw new AmqpRejectAndDontRequeueException("core.events 형식 오류: " + type);
-        }
-        long organizationId = org.asLong();
-        if (!deployment.includes(organizationId)) {
-            return false;
-        }
-        Boolean done = tx.execute(status -> {
-            if (!processed.insertIfAbsent(CONSUMER, messageId.asString(), clock.instant())) {
-                return false;
-            }
-            for (RawEventHandler h : targets) {
-                h.handle(organizationId, type, payload);
             }
             return true;
         });

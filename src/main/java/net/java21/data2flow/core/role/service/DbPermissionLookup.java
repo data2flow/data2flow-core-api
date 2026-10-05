@@ -48,6 +48,18 @@ public class DbPermissionLookup implements PermissionLookup {
         return userGrant(organizationId, userId);
     }
 
+    /**
+     * 신원을 명시한 판정(RoleChecker가 요청 신원의 토큰 ID를 넘긴다, IAM-05.01). 토큰 ID가 있으면 그 토큰으로, 없으면 사용자 역할로 판정한다.
+     * 요청 밖 작업(메시지 소비자 등)에서도 요청 신원 보관소에 기대지 않는다.
+     */
+    @Override
+    public AccessGrant find(long organizationId, long userId, Long accessTokenId) {
+        if (accessTokenId != null) {
+            return tokens.grant(organizationId, userId, accessTokenId, () -> userGrant(organizationId, userId));
+        }
+        return userGrant(organizationId, userId);
+    }
+
     /** 장기 토큰 주체의 실효 권한(범위 교집합까지, 내부 access-grant API) */
     public AccessGrant findForToken(long organizationId, long userId, long tokenId) {
         return tokens.effective(organizationId, userId, tokenId, () -> userGrant(organizationId, userId));

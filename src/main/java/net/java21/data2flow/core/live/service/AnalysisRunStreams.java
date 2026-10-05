@@ -102,6 +102,11 @@ public class AnalysisRunStreams implements SmartLifecycle {
     }
 
     /** 실행 상태 이벤트(EVT-ANA-01, 파드별 임시 큐) 한 건 */
+    /** EVT-ANA-01(계약 타입). analytics가 보낸 페이로드 모양 그대로 화면에 넘긴다 */
+    public void onEvent(long organizationId, net.java21.data2flow.contracts.message.event.AnalyticsRunStatusChanged event) {
+        onEvent(organizationId, (JsonNode) json.valueToTree(event));
+    }
+
     public void onEvent(long organizationId, JsonNode payload) {
         Long runId = AnalysisService.longOrNull(payload.get("runId"));
         if (runId == null) {

@@ -409,9 +409,9 @@ class AnalyticsIT extends AnalyticsItSupport {
                 .query(String.class).single()).startsWith("2026-10-11 21:00:00");
 
         // EVT-ANA-01 성공 → 최근 성공 실행, 늦게 온 옛 실행은 덮지 않음
-        assertThat(event("analytics.run.succeeded", "{\"runId\":\"601\",\"analysisId\":\"" + id + "\",\"status\":\"SUCCEEDED\",\"finishedAt\":\"2026-10-04T21:03:00Z\"}"))
+        assertThat(event("analytics.run.succeeded", "{\"runId\":\"601\",\"analysisId\":\"" + id + "\",\"status\":\"SUCCEEDED\",\"trigger\":\"SCHEDULE\",\"finishedAt\":\"2026-10-04T21:03:00Z\"}"))
                 .isTrue();
-        assertThat(event("analytics.run.failed", "{\"runId\":\"590\",\"analysisId\":\"" + id + "\",\"status\":\"FAILED\"}")).isTrue();
+        assertThat(event("analytics.run.failed", "{\"runId\":\"590\",\"analysisId\":\"" + id + "\",\"status\":\"FAILED\",\"trigger\":\"SCHEDULE\"}")).isTrue();
         mvc.perform(as(org, analyst, get("/core/analytics/analyses"))).andExpect(jsonPath("$.responses[0].lastRun.status").value("SUCCEEDED"));
         assertThat(event("analytics.schedule.stopped", "{\"analysisId\":\"" + id + "\",\"ownerUserId\":\"" + analyst + "\",\"consecutiveFailures\":3}"))
                 .isTrue();
@@ -499,8 +499,8 @@ class AnalyticsIT extends AnalyticsItSupport {
                 .andExpect(jsonPath("$.response.data.runId").isEmpty());
 
         stubRun("801", id, "SUCCEEDED");
-        event("analytics.run.succeeded", "{\"runId\":\"801\",\"analysisId\":\"" + id + "\",\"status\":\"SUCCEEDED\",\"finishedAt\":\"2026-10-03T00:05:00Z\"}");
-        event("analytics.run.failed", "{\"runId\":\"802\",\"analysisId\":\"" + id + "\",\"status\":\"FAILED\"}");
+        event("analytics.run.succeeded", "{\"runId\":\"801\",\"analysisId\":\"" + id + "\",\"status\":\"SUCCEEDED\",\"trigger\":\"SCHEDULE\",\"finishedAt\":\"2026-10-03T00:05:00Z\"}");
+        event("analytics.run.failed", "{\"runId\":\"802\",\"analysisId\":\"" + id + "\",\"status\":\"FAILED\",\"trigger\":\"SCHEDULE\"}");
         mvc.perform(json(as(org, analyst, post(dataPath)), "{}")).andExpect(jsonPath("$.response.data.runId").value("801"))
                 .andExpect(jsonPath("$.response.data.chart.id").value("c2")).andExpect(jsonPath("$.response.data.metrics.length()").value(1))
                 .andExpect(jsonPath("$.response.data.metrics[0].key").value("score"));
