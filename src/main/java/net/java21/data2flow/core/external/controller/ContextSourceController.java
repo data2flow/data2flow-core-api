@@ -22,7 +22,7 @@ import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 
-/** 외부 맥락 소스(design/api/DSC-api.md §4 API-DSC-40~43, 사이트 카드 API-DSC-44·45 제안, 내부 API-DSC-78 제안, DSC-06) */
+/** 외부 맥락 소스(design/api/DSC-api.md §4 API-DSC-40~43, 사이트 카드 API-DSC-44·45, 내부 API-DSC-80, DSC-06) */
 @RestController
 public class ContextSourceController {
 
@@ -32,13 +32,13 @@ public class ContextSourceController {
         this.service = service;
     }
 
-    /** API-DSC-44(제안) 사이트 외부 맥락 카드 — SRC_READ */
+    /** API-DSC-44 사이트 외부 맥락 카드 — SRC_READ */
     @GetMapping("/core/sites/{site-id}/context-sources")
     public ApiResponse<SiteContextResponse> site(@PathVariable("site-id") long siteId) {
         return ApiResponse.success(service.site(siteId));
     }
 
-    /** API-DSC-45(제안) 카드 켜기·설정 — SRC_ADMIN */
+    /** API-DSC-45 카드 켜기·설정 — SRC_ADMIN */
     @PutMapping("/core/sites/{site-id}/context-sources/{type}")
     public ApiResponse<ContextSourceView> put(@PathVariable("site-id") long siteId, @PathVariable("type") String type,
                                               @RequestBody JsonNode body) {
@@ -69,7 +69,7 @@ public class ContextSourceController {
         return ApiResponse.success(service.uploadIcal(file));
     }
 
-    /** 내부 API-DSC-78(제안): ingress 공공 API 호출량 기록·한도 판정 */
+    /** 내부 API-DSC-80: ingress 공공 API 호출량 기록·한도 판정 */
     @PostMapping("/internal/core/sources/{source-id}/api-usage")
     public ApiResponse<UsageRecorded> record(@PathVariable("source-id") long sourceId, @RequestBody(required = false) JsonNode body) {
         return ApiResponse.success(service.recordInternal(sourceId, body));

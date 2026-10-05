@@ -69,9 +69,9 @@ import java.util.UUID;
  * 공휴일(HOLIDAY), 학사일정(ICAL). 기상청·에어코리아 정기 수집은 ingress(API-DSC-50으로 설정·API_KEY를 받음)가 하고, 공휴일·iCal은 core가
  * 직접 갱신한다({@link ContextSyncService}).
  * <ul>
- *   <li>카드 조회·켜기/설정: API-DSC-44·45(제안, SRC_READ·SRC_ADMIN)</li>
+ *   <li>카드 조회·켜기/설정: API-DSC-44·45(SRC_READ·SRC_ADMIN)</li>
  *   <li>API-DSC-40 호출량(최근 N일 ≤ 90), API-DSC-41 지금 갱신, API-DSC-42 가까운 측정소 5곳, API-DSC-43 iCal 파일 업로드(≤2MB)</li>
- *   <li>내부 API-DSC-78(제안): ingress가 공공 API 호출량을 알려 주고 한도 판정을 받는다</li>
+ *   <li>내부 API-DSC-80: ingress가 공공 API 호출량을 알려 주고 한도 판정을 받는다</li>
  * </ul>
  */
 @Service
@@ -135,7 +135,7 @@ public class ContextSourceService {
 
     // ---------------------------------------------------------------- 사이트 카드
 
-    /** API-DSC-44(제안) 사이트의 외부 맥락 카드 4개 */
+    /** API-DSC-44 사이트의 외부 맥락 카드 4개 */
     public SiteContextResponse site(long siteId) {
         roleChecker.require(Permission.SRC_READ);
         long org = roleChecker.currentUser().organizationId();
@@ -152,7 +152,7 @@ public class ContextSourceService {
     }
 
     /**
-     * API-DSC-45(제안) 카드 켜기·끄기·설정. 없으면 만들고(코드 {@code ctx-<유형>-<사이트>}), 켜면 ACTIVE·끄면 PAUSED.
+     * API-DSC-45 카드 켜기·끄기·설정. 없으면 만들고(코드 {@code ctx-<유형>-<사이트>}), 켜면 ACTIVE·끄면 PAUSED.
      * 공휴일·iCal은 켜는 즉시 한 번 동기화한다(UC-DSC-09 3·4단계).
      */
     public ContextSourceView put(long siteId, String rawType, JsonNode body) {
@@ -480,7 +480,7 @@ public class ContextSourceService {
         return new IcalUploadResponse(FILE_KEY_PREFIX + id, events.size(), List.copyOf(categories));
     }
 
-    /** 내부 API-DSC-78(제안): ingress의 공공 API 호출 결과를 더하고 한도 판정을 돌려준다(calls=0이면 판정만) */
+    /** 내부 API-DSC-80: ingress의 공공 API 호출 결과를 더하고 한도 판정을 돌려준다(calls=0이면 판정만) */
     public UsageRecorded recordInternal(long sourceId, JsonNode body) {
         int calls = body == null ? 0 : body.path("calls").asInt(0);
         int failures = body == null ? 0 : body.path("failures").asInt(0);

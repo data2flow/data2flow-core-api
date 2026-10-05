@@ -7,7 +7,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
-/** 외부 맥락 API(design/api/DSC-api.md §4 API-DSC-40~43 + 사이트별 카드 API-DSC-44·45 제안) */
+/** 외부 맥락 API(design/api/DSC-api.md §4 API-DSC-40~43 + 사이트별 카드 API-DSC-44·45) */
 public final class ExternalDtos {
 
     private ExternalDtos() {
@@ -55,7 +55,7 @@ public final class ExternalDtos {
     public record IcalUploadResponse(String fileObjectKey, int eventCount, List<String> categories) {
     }
 
-    /** 내부 API-DSC-78(제안) 호출량 기록 응답 */
+    /** 내부 API-DSC-80 호출량 기록 응답 */
     public record UsageRecorded(LocalDate day, int calls, int failures, Integer quota, boolean warning, boolean exhausted,
                                 Instant resumeAt) {
     }

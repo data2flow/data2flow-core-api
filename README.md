@@ -91,6 +91,28 @@ Flyway `V202610071000`(추가만). 규칙 컴파일은 flow-engine(API-FLW-86)�
 - 실시간: `/core/stream/alarms`(API-RUL-14, `alarm.raised|updated|cleared`), `/core/stream/live` 토픽 `alarms`(`alarm`)·`notifications`(본인 WEB 알림 `notification`), 모든 연결에 `emergency-stop`.
 - 받는 이벤트(`core.events`): EVT-RUL-01 `alarm.signal`, EVT-DEV-08, EVT-ACT-04·05·08, EVT-RUL-04, EVT-FLW-03(엔진 정지 → MAJOR `system:FLOW_STATE:{flowId}`). 내는 이벤트: EVT-RUL-02, EVT-OPS-02, EVT-ACT-03.
 
+## M5 데이터 관리 (DSC·TSD·DEV·DSH·SCR·ING·OPS-01.03, ADR-055)
+
+Flyway `V202610120900`(보관·스크립트)·`0910`(외부 맥락·달력)·`0920`(작업 지시·자산·설치)·`0930`(내보내기·가져오기·사전)·`0940`(대시보드·품질)·`0950`(출력·엣지·소스), 모두 추가만.
+
+- 보관·콜드 보관: API-TSD-40~43(줄이면 미리 보기 확인 토큰 10분), 목록 `/core/archives`. 내부 API-TSD-60(pipeline 5분마다)·61(콜드 보관 등록). 저장하면 pipeline API-TSD-53으로 알리고(실패해도 5분 조회로 반영), 미리 보기는 API-TSD-62 중계.
+- 스크립트: 테스트 케이스·배포 전 확인(API-SCR-35), 공유 모듈, 수식 파생 항목(API-SCR-37·38), 설정값·지표·오류·로그 수집(API-SCR-12~14·22), 배포 뒤 재처리 제안. 실행 묶음 API-SCR-32에 `configRevision`·`logCaptureUntil`·`modules`·`formulaMetrics`.
+- 외부 맥락·달력: 사이트별 카드 API-DSC-44·45, 공휴일·iCal은 core가 갱신(실패 30초·2분·10분 뒤 ERROR + 알람), 기상청·에어코리아는 설정·키만(수집은 ingress, 호출량 내부 API-DSC-80). 파사드 `WeatherProvider`·`AirQualityProvider`·`HolidayProvider` — 키가 없으면 가짜 구현(ADR-040). 조직 달력 API-DEV-100~102, 운영 모드(수동 > 유지보수 > 달력 > 시간표) 1분 계산·EVT-DEV-06, 예약 제어 `skipHolidays`.
+- 기기: 작업 지시·정기 점검·자산(EVT-DEV-09), QR 라벨·현장 설치·설치 현황판(EVT-DEV-14), 모델 JSON·DTDL 가져오기·내보내기, 표준 형식(DTDL·NGSI-LD·Brick) 내보내기(EVT-DEV-13), 기기 검색식·저장된 검색, 게이트웨이 수신 분포, 온도 단위.
+- 조회·교환: 내보내기 CSV·XLSX·Parquet(동기 100만 행·30초, 사용자당 3개, 7일, 서명 링크 1시간), 정기 내보내기(메일 링크·S3·SFTP), 가져오기(CSV·InfluxDB → pipeline API-TSD-52·50), 데이터 사전, 공간 비교, 확정 집계 Redis 캐시(`X-Cache`). 파일은 오브젝트 저장소 전까지 DB(`exchange_file_chunks`·`file_blobs`).
+- 대시보드: 사용자 정의 대시보드·위젯 데이터·JSON 가져오기·내보내기, 읽기 전용 공유 링크(`/core/public/share/**`), 브랜딩(`/core/public/branding/**`), 층 목록·IFC 모델(DB, 200MB). 수집: 재처리 작업 목록·품질 추이/요약·공백 완전성, 저장 지표 API-OPS-03(6시간마다 표 크기, `system:DISK_FREE`).
+- 데이터 소스: 출력 연결 정의·비밀값과 action용 내부 API-DSC-73~75(실행은 action), 테스트·재전송 중계(API-DSC-76·77), Webhook 수신 소스(수신 키·HMAC 1회 표시), 인증 방식 매트릭스·TLS 규칙·인증서 만료, 무중단 자격증명 교체(기본 꺼짐), 커넥터 템플릿 11종, 엣지 등록·설정 판·업데이트 승인·원격 명령(ingress용 API-DSC-78·79). 소비 이벤트 EVT-DSC-07·08·10, EVT-ING-09, EVT-TSD-02·03·04.
+
+| 환경변수 | 용도 |
+|---|---|
+| `DATA2FLOW_TELEMETRY_CACHE_ENABLED`(기본 false)·`DATA2FLOW_REDIS_HOST`·`_PORT`·`_USERNAME`·`_PASSWORD`·`_DATABASE` | 확정 집계 조회 캐시(TSD-06.04, 키 `data2flow:`). Redis가 멈춰도 readiness는 그대로 |
+| `DATA2FLOW_EXCHANGE_JOBS_ENABLED`(기본 true, local false)·`DATA2FLOW_EXPORT_WORKERS`(기본 2) | 내보내기·가져오기 작업(15초)·정기 내보내기(1분) |
+| `DATA2FLOW_HOLIDAY_SERVICE_KEY`·`DATA2FLOW_AIRKOREA_SERVICE_KEY`(선택) | 공공데이터포털 키. 없으면 가짜 구현 |
+| `DATA2FLOW_WEBHOOK_BASE_URL`(기본 `https://data2flow-hook.java21.net`) | Webhook 수신 주소·엣지 설치 명령 |
+| `DATA2FLOW_SOURCE_ZERO_DOWNTIME_ROTATION`(기본 false) | 무중단 자격증명 교체(ingress 지원 뒤 켬) |
+| `DATA2FLOW_EDGE_AGENT_VERSIONS`(기본 1.0.0)·`DATA2FLOW_EDGE_IMAGE` | 엣지 에이전트 게시 버전(마지막이 최신)·이미지 |
+| `DATA2FLOW_STORAGE_DISK_CAPACITY_BYTES`(기본 0 = 계산 안 함) | 저장 지표 디스크 여유 % |
+
 ## 작업 규칙
 
 스펙 ID에서 시작하고(인수 테스트 → 테스트 케이스 → 구현), 브랜치·PR·테스트 이름에 스펙 ID를 남깁니다. 1.0 전에는 `main` + `feat/<스펙ID>-<요약>`, 1.0 뒤에는 버전 브랜치 `feature/vX.Y`를 씁니다(ADR-039).
