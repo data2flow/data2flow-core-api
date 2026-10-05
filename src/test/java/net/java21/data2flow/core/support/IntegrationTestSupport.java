@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @Import(TestBeans.class)
 public abstract class IntegrationTestSupport {
 
-    // 대역 서버 주소가 다른 IT마다 Spring 컨텍스트가 캐시되어 연결 풀(10개씩)이 쌓인다. 기본 100개를 넘지 않게 넉넉히 연다
+    // 문맥(캐시)마다 커넥션 풀이 생기므로(대역 서버 주소가 다른 IT, 실제 서버 포트 문맥 FlowLiveViewIT) 기본 100개로는 모자란다
     protected static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18-alpine")
             .withCommand("postgres", "-c", "max_connections=400");
     protected static final RabbitMQContainer RABBIT = new RabbitMQContainer("rabbitmq:3.13-management");

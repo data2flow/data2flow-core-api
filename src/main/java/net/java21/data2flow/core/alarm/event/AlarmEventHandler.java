@@ -5,6 +5,7 @@ import net.java21.data2flow.contracts.alarm.AlarmKeys;
 import net.java21.data2flow.contracts.alarm.AlarmSeverity;
 import net.java21.data2flow.contracts.alarm.AlarmSourceType;
 import net.java21.data2flow.contracts.audit.AuditActorType;
+import net.java21.data2flow.contracts.capability.ExpectedEffect;
 import net.java21.data2flow.contracts.message.DomainEvent;
 import net.java21.data2flow.contracts.message.EventType;
 import net.java21.data2flow.contracts.message.event.AlarmSignal;
@@ -46,7 +47,9 @@ import java.util.UUID;
  *   <li>EVT-ACT-08 진동 차단 → WARNING {@code system:OSCILLATION:{deviceId}:{capability}}(ADR-043 ③)</li>
  *   <li>EVT-ACT-05 드라이버 서킷 열림·닫힘 → MAJOR {@code system:DRIVER_CIRCUIT_OPEN:{driverId}} 발생·해제</li>
  *   <li>EVT-RUL-04 알림 발송 결과 → 알람 타임라인 NOTIFIED(같은 발송·상태는 한 번)</li>
- *   <li>EVT-ACT-04 효과 없음 → 기기 이력(감사 {@code COMMAND_NO_EFFECT}, DEV-02.07)</li>
+ *   <li>EVT-ACT-04 효과 없음 → 기기 이력(감사 {@code COMMAND_NO_EFFECT}, DEV-02.07)과 WARNING 시스템 알람
+ *       {@code system:COMMAND_NO_EFFECT:{deviceId}:{capability}}(ACT-08.01 "알람으로 이어짐", 시나리오 2의 4단계 — 알람이 열리면 정책으로 알림).
+ *       자동 해제하지 않는다(사람이 확인·해제), 같은 기기·기능의 반복은 재발생</li>
  * </ul>
  */
 @Component
@@ -235,8 +238,17 @@ public class AlarmEventHandler implements CoreEventHandler {
         if (c.observed() != null) {
             detail.put("observedDelta", c.observed().delta());
         }
-        audits.record(audits.event(org, "COMMAND_NO_EFFECT").occurredAt(c.at() == null ? at : c.at())
+        Instant when = c.at() == null ? at : c.at();
+        audits.record(audits.event(org, "COMMAND_NO_EFFECT").occurredAt(when)
                 .actor(AuditActorType.SYSTEM, "data2flow-action", null).target("DEVICE", Long.toString(c.deviceId())).detail(detail));
+        DeviceInfo device = alarmRepository.findDeviceInfo(org, c.deviceId()).orElse(null);
+        String name = device == null || device.name() == null ? "#" + c.deviceId() : device.name();
+        String metric = c.expected().metric();
+        String direction = c.expected().direction() == null ? "" : c.expected().direction() == ExpectedEffect.Direction.DOWN ? " 하강" : " 상승";
+        alarms.raise(new AlarmService.Raise(org, AlarmKeys.system(AlarmService.COMMAND_NO_EFFECT, Long.toString(c.deviceId()), c.capability()),
+                AlarmSourceType.SYSTEM, null, null, null, AlarmSeverity.WARNING,
+                "제어 효과 없음: " + name + " " + c.capability() + " (" + c.expected().withinMinutes() + "분 안 " + metric + direction + " 없음)",
+                c.deviceId(), c.spaceId(), metric, c.observed() == null ? null : c.observed().delta(), null, null, when, "SYSTEM", false, false));
     }
 
     static String actorType(AlarmSignal s) {
