@@ -47,6 +47,8 @@ public final class IngressStubServer {
         }
         server.setExecutor(Executors.newCachedThreadPool());
         server.createContext("/internal/ingress/sources/", this::handle);
+        server.createContext("/internal/ingress/payload-schemas/", this::payload);
+        server.createContext("/internal/ingress/topic-templates/", this::payload);
         server.start();
     }
 
@@ -99,6 +101,21 @@ public final class IngressStubServer {
         exchange.close();
     }
 
+    /** API-DSC-82 검사·API-DSC-83 미리보기(DSC-09.07·09.08): 경로별로 정한 상태·본문으로 답하고 받은 본문을 남긴다 */
+    final java.util.Map<String, int[]> payloadStatus = new java.util.concurrent.ConcurrentHashMap<>();
+    final java.util.Map<String, String> payloadResponse = new java.util.concurrent.ConcurrentHashMap<>();
+    final List<String> payloadBodies = new CopyOnWriteArrayList<>();
+
+    private void payload(HttpExchange exchange) throws IOException {
+        String path = exchange.getRequestURI().getPath();
+        payloadBodies.add(path + " " + new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+        byte[] body = String.valueOf(payloadResponse.getOrDefault(path, "{}")).getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().add("Content-Type", "application/json");
+        exchange.sendResponseHeaders(payloadStatus.getOrDefault(path, new int[]{200})[0], body.length);
+        exchange.getResponseBody().write(body);
+        exchange.close();
+    }
+
     public String baseUrl() {
         return "http://127.0.0.1:" + server.getAddress().getPort();
     }
@@ -115,6 +132,9 @@ public final class IngressStubServer {
     void reset() {
         release();
         testBodies.clear();
+        payloadStatus.clear();
+        payloadResponse.clear();
+        payloadBodies.clear();
         callers.clear();
         livePaths.clear();
         testStatus.set(200);

@@ -88,7 +88,7 @@ public final class SourceModels {
                              boolean isDev, String decoderKey, JsonNode decoderConfig, Long decodeScriptId,
                              String unknownDevicePolicy, Long defaultModelId, Long defaultSpaceId, int autoregLimitPerHour,
                              int noDataAlarmAfterSec, Long siteId, Instant archivedAt, int version, Instant createdAt,
-                             Instant updatedAt) {
+                             Instant updatedAt, String topicTemplate) {
 
         /** 인증 방식({@link #authOf}) */
         public String auth() {

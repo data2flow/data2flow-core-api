@@ -13,7 +13,9 @@ import net.java21.data2flow.contracts.secret.Secret;
 import net.java21.data2flow.core.audit.service.Audits;
 import net.java21.data2flow.core.source.domain.JsonSchemaLite;
 import net.java21.data2flow.core.source.domain.SourceConfigValidator;
+import net.java21.data2flow.core.source.domain.PayloadSettings;
 import net.java21.data2flow.core.source.domain.SourceErrorCode;
+import net.java21.data2flow.core.source.repository.PayloadSchemaRepository;
 import net.java21.data2flow.core.source.domain.SourceModels;
 import net.java21.data2flow.core.source.domain.SourceModels.DataSource;
 import net.java21.data2flow.core.source.domain.SourceModels.SecretMeta;
@@ -76,7 +78,7 @@ public class DataSourceService {
 
     private static final Set<String> PATCHABLE = Set.of("name", "connection", "topics", "secret", "isDev", "decoderKey", "decoderConfig",
             "decodeScriptId", "unknownDevicePolicy", "defaultModelId", "defaultSpaceId", "autoregLimitPerHour", "noDataAlarmAfterSec",
-            "baseVersion", "code", "type", "connectorKey");
+            "baseVersion", "code", "type", "connectorKey", "payload", "topicTemplate");
 
     private final DataSourceRepository sources;
     private final SourceReferenceRepository references;
@@ -88,11 +90,13 @@ public class DataSourceService {
     private final Audits audits;
     private final Clock clock;
     private final SourceRotationService rotations;
+    private final PayloadSchemaRepository schemas;
 
     public DataSourceService(DataSourceRepository sources, SourceReferenceRepository references, ConnectorCatalogRepository catalog,
                              SourceSecrets secrets, SourceStateService states, SourceQueryService queries, RoleChecker roleChecker,
-                             Audits audits, Clock clock, SourceRotationService rotations) {
+                             Audits audits, Clock clock, SourceRotationService rotations, PayloadSchemaRepository schemas) {
         this.rotations = rotations;
+        this.schemas = schemas;
         this.sources = sources;
         this.references = references;
         this.catalog = catalog;
@@ -154,6 +158,9 @@ public class DataSourceService {
         if (activate) {
             requireActivatable(type, settings.connection(), settings.topics(), incoming.keySet());
         }
+        String connectorKeyForPayload = connector == null ? null : connector.key();
+        ObjectNode payload = PayloadSettings.normalize(b.get("payload"), connectorKeyForPayload, ref -> schemas.exists(orgId, ref));
+        String topicTemplate = PayloadSettings.topicTemplate(b.get("topicTemplate"));
         Instant now = clock.instant();
         String lifecycle = activate ? SourceModels.ACTIVE : SourceModels.DRAFT;
         long id = sources.insert(orgId, code, name.strip(), type, connector == null ? null : connector.key(),
@@ -162,6 +169,9 @@ public class DataSourceService {
                 settings.unknownDevicePolicy(), settings.defaultModelId(), settings.defaultSpaceId(), settings.autoregLimitPerHour(),
                 settings.noDataAlarmAfterSec(), user.userId(), now);
         sources.replaceTopics(orgId, id, settings.topics(), now);
+        if (payload != null || topicTemplate != null) {
+            sources.updatePayload(orgId, id, payload == null ? null : payload.toString(), topicTemplate);
+        }
         Map<String, String> fingerprints = secrets.store(orgId, id, incoming, now);
         if (activate) {
             states.activated(orgId, id);
@@ -266,11 +276,19 @@ public class DataSourceService {
         DataSource merged = new DataSource(s.id(), orgId, s.code(), name.strip(), s.type(), s.connectorKey(), s.connectorVersion(),
                 s.lifecycle(), settings.connection(), s.tls(), s.payload(), isDev, settings.decoderKey(), settings.decoderConfig(),
                 settings.decodeScriptId(), settings.unknownDevicePolicy(), settings.defaultModelId(), settings.defaultSpaceId(),
-                settings.autoregLimitPerHour(), settings.noDataAlarmAfterSec(), s.siteId(), s.archivedAt(), s.version(), s.createdAt(), now);
+                settings.autoregLimitPerHour(), settings.noDataAlarmAfterSec(), s.siteId(), s.archivedAt(), s.version(), s.createdAt(), now,
+                s.topicTemplate());
         VersionCheck.requireUpdated(sources.update(merged, settings.connection().toString(),
                 settings.decoderConfig() == null ? null : settings.decoderConfig().toString(), baseVersion, user.userId(), now));
         if (body.has("topics")) {
             sources.replaceTopics(orgId, sourceId, settings.topics(), now);
+        }
+        if (body.has("payload") || body.has("topicTemplate")) {
+            ObjectNode payload = body.has("payload")
+                    ? PayloadSettings.normalize(body.get("payload"), s.connectorKey(), ref -> schemas.exists(orgId, ref))
+                    : s.payload() != null && s.payload().isObject() ? (ObjectNode) s.payload() : null;
+            String topicTemplate = body.has("topicTemplate") ? PayloadSettings.topicTemplate(body.get("topicTemplate")) : s.topicTemplate();
+            sources.updatePayload(orgId, sourceId, payload == null ? null : payload.toString(), topicTemplate);
         }
         int removed = sources.deleteSecretsExcept(orgId, sourceId, allowed);
         Map<String, String> fingerprints = secrets.store(orgId, sourceId, incoming, now);

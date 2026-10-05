@@ -151,7 +151,7 @@ public class SourceQueryService {
                 .getOrDefault(s.id(), Map.of()), now);
         List<String> clientIds = runtimes.stream().map(RuntimeRow::clientId).filter(Objects::nonNull).distinct().toList();
         return new SourceDetailResponse(Long.toString(s.id()), s.code(), s.name(), s.type(), s.connectorKey(), s.connectorVersion(),
-                s.lifecycle(), s.connection(), s.tls(), s.payload(), s.isDev(),
+                s.lifecycle(), s.connection(), s.tls(), s.payload(), s.topicTemplate(), s.isDev(),
                 sources.findTopics(orgId, s.id()).stream().map(t -> new TopicDto(t.topic(), t.qos())).toList(),
                 SourceSecrets.primary(s.type(), s.auth(), metas), metas.stream().map(SourceSecrets::info).toList(), s.decoderKey(),
                 s.decoderConfig(), id(s.decodeScriptId()), s.unknownDevicePolicy(), id(s.defaultModelId()), id(s.defaultSpaceId()),

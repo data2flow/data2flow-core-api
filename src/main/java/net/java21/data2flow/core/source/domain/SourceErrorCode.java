@@ -11,6 +11,8 @@ public enum SourceErrorCode implements ErrorCode {
     SOURCE_CODE_DUPLICATE(409),
     SOURCE_CLIENT_ID_DUPLICATE(409),
     SOURCE_CONFIG_INVALID(400),
+    /** payload 스키마 파일을 읽을 수 없음(API-DSC-59, 해석은 ingress API-DSC-82가 하고 core는 크기·확장자만) */
+    SOURCE_SCHEMA_INVALID(400),
     SOURCE_STATE_CONFLICT(409),
     SOURCE_IN_USE(409),
     SOURCE_LIMIT_EXCEEDED(429),

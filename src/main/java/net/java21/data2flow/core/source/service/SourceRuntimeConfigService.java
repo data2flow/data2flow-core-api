@@ -128,6 +128,13 @@ public class SourceRuntimeConfigService {
             c.set("version", c.get("protocolVersion"));
         }
         c.put("clientIdBase", s.clientIdBase());
+        // DSC-09.07·09.08(ADR-056): 형식 변환·토픽 템플릿은 ingress가 기록 직전에 한다
+        if (s.payload() != null && s.payload().isObject()) {
+            c.set("payload", s.payload());
+        }
+        if (s.topicTemplate() != null) {
+            c.put("topicTemplate", s.topicTemplate());
+        }
         return c;
     }
 

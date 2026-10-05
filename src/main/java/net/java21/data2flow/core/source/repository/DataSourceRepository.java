@@ -34,7 +34,7 @@ public class DataSourceRepository {
             s.connection::text AS connection, s.tls::text AS tls, s.payload::text AS payload, s.is_dev, s.decoder_key,
             s.decoder_config::text AS decoder_config, s.decode_script_id, s.unknown_device_policy, s.default_model_id,
             s.default_space_id, s.autoreg_limit_per_hour, s.no_data_alarm_after_sec, s.site_id, s.archived_at, s.version,
-            s.created_at, s.updated_at""";
+            s.created_at, s.updated_at, s.topic_template""";
 
     private final JdbcClient jdbc;
     private final JsonMapper json;
@@ -176,6 +176,24 @@ public class DataSourceRepository {
                 .param("model", s.defaultModelId()).param("space", s.defaultSpaceId()).param("autoreg", s.autoregLimitPerHour())
                 .param("nodata", s.noDataAlarmAfterSec()).param("by", userId).param("now", Pg.ts(now))
                 .param("org", s.organizationId()).param("id", s.id()).param("base", baseVersion).update();
+    }
+
+    /** payload 형식·토픽 템플릿 저장(DSC-09.07·09.08). 같은 트랜잭션의 다른 저장이 판을 올리므로 판은 그대로 */
+    public int updatePayload(long organizationId, long id, String payloadJson, String topicTemplate) {
+        return jdbc.sql("""
+                        UPDATE data2flow_core.data_sources SET payload = CAST(:payload AS jsonb), topic_template = :template
+                         WHERE organization_id = :org AND id = :id""")
+                .param("payload", payloadJson).param("template", topicTemplate).param("org", organizationId).param("id", id).update();
+    }
+
+    /** payload만 바꾸고 판을 올린다(스키마 업로드 API-DSC-59) */
+    public int updatePayloadAndBump(long organizationId, long id, String payloadJson, long userId, Instant now) {
+        return jdbc.sql("""
+                        UPDATE data2flow_core.data_sources SET payload = CAST(:payload AS jsonb), version = version + 1, updated_by = :by,
+                               updated_at = :now
+                         WHERE organization_id = :org AND id = :id""")
+                .param("payload", payloadJson).param("by", userId).param("now", Pg.ts(now)).param("org", organizationId).param("id", id)
+                .update();
     }
 
     /** lifecycle 변경. 낙관적 잠금 */
@@ -379,7 +397,8 @@ public class DataSourceRepository {
                 rs.getString("decoder_key"), node(rs.getString("decoder_config")), Pg.longOrNull(rs, "decode_script_id"),
                 rs.getString("unknown_device_policy"), Pg.longOrNull(rs, "default_model_id"), Pg.longOrNull(rs, "default_space_id"),
                 rs.getInt("autoreg_limit_per_hour"), rs.getInt("no_data_alarm_after_sec"), Pg.longOrNull(rs, "site_id"),
-                Pg.instant(rs, "archived_at"), rs.getInt("version"), Pg.instant(rs, "created_at"), Pg.instant(rs, "updated_at"));
+                Pg.instant(rs, "archived_at"), rs.getInt("version"), Pg.instant(rs, "created_at"), Pg.instant(rs, "updated_at"),
+                rs.getString("topic_template"));
     }
 
     private JsonNode node(String text) {

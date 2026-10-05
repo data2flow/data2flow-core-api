@@ -34,8 +34,8 @@ public final class SourceDtos {
     /** API-DSC-02·03·04 소스 상세 */
     @JsonInclude(JsonInclude.Include.ALWAYS)
     public record SourceDetailResponse(String id, String code, String name, String type, String connectorKey, String connectorVersion,
-                                       String lifecycle, JsonNode connection, JsonNode tls, JsonNode payload, boolean isDev,
-                                       List<TopicDto> topics, SecretInfo secret, List<SecretInfo> secrets, String decoderKey,
+                                       String lifecycle, JsonNode connection, JsonNode tls, JsonNode payload, String topicTemplate,
+                                       boolean isDev, List<TopicDto> topics, SecretInfo secret, List<SecretInfo> secrets, String decoderKey,
                                        JsonNode decoderConfig, String decodeScriptId, String unknownDevicePolicy, String defaultModelId,
                                        String defaultSpaceId, int autoregLimitPerHour, int noDataAlarmAfterSec, String siteId,
                                        String webhookUrl, String clientIdBase, List<String> clientIds, List<RuntimeInstance> runtime,
