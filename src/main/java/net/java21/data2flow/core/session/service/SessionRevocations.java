@@ -48,13 +48,20 @@ public class SessionRevocations {
         return revoked;
     }
 
-    /** 비활성화·삭제 시 장기 토큰(API 키·MCP)도 즉시 무효(IAM-01.04). 발급·검증 API는 M6(IAM-05)에서 만든다 */
+    /**
+     * 비활성화·삭제 시 장기 토큰(API 키·MCP)도 즉시 무효(IAM-01.04, AT-IAM-10.1). 원천을 REVOKED로 바꾸고 gateway 캐시 삭제를
+     * auth에 알린다(API-IAM-37b tokenIds). 폐기한 수
+     */
     public int revokeApiTokensOfUser(long organizationId, long userId) {
-        return jdbc.sql("""
+        List<String> ids = jdbc.sql("""
                         UPDATE data2flow_core.api_tokens SET status = 'REVOKED', updated_at = :now
                          WHERE organization_id = :org AND owner_type = 'USER' AND owner_id = :user
-                           AND status IN ('PENDING_APPROVAL', 'ACTIVE', 'ROTATING')""")
+                           AND status IN ('PENDING_APPROVAL', 'ACTIVE', 'ROTATING')
+                        RETURNING id""")
                 .param("now", net.java21.data2flow.core.common.Pg.ts(clock.instant()))
-                .param("org", organizationId).param("user", userId).update();
+                .param("org", organizationId).param("user", userId).query(Long.class).list()
+                .stream().map(String::valueOf).toList();
+        outbox.authBlacklist(organizationId, List.of(), List.of(), ids, "USER_DISABLED");
+        return ids.size();
     }
 }

@@ -72,12 +72,25 @@ public class OutboxWriter {
     /** API-IAM-37b 본문 {sids, jtis, reason} */
     public void authBlacklist(long organizationId, java.util.Collection<String> sids, java.util.Collection<String> jtis,
                               String reason) {
-        if ((sids == null || sids.isEmpty()) && (jtis == null || jtis.isEmpty())) {
+        authBlacklist(organizationId, sids, jtis, java.util.List.of(), reason);
+    }
+
+    /**
+     * API-IAM-37b 본문 {sids, jtis, tokenIds, reason}. tokenIds는 장기 토큰(API 키·MCP) 폐기 알림이다: auth가 EVT-IAM-03
+     * {@code TOKEN_ID}를 내어 gateway 검증 캐시에서 바로 지운다(IAM-05.03 "보통 1초"). 원천 판정은 core(API-IAM-46)라 놓쳐도 캐시 수명
+     * 30초 안에 거부된다.
+     */
+    public void authBlacklist(long organizationId, java.util.Collection<String> sids, java.util.Collection<String> jtis,
+                              java.util.Collection<String> tokenIds, String reason) {
+        if ((sids == null || sids.isEmpty()) && (jtis == null || jtis.isEmpty()) && (tokenIds == null || tokenIds.isEmpty())) {
             return;
         }
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("sids", sids == null ? java.util.List.of() : java.util.List.copyOf(sids));
         payload.put("jtis", jtis == null ? java.util.List.of() : java.util.List.copyOf(jtis));
+        if (tokenIds != null && !tokenIds.isEmpty()) {
+            payload.put("tokenIds", java.util.List.copyOf(tokenIds));
+        }
         payload.put("reason", reason);
         String body = json.writeValueAsString(payload);
         repository.insert(organizationId, Tokens.sha256Hex("AUTH|" + UUID.randomUUID()), "EVENT", AUTH_TARGET, AUTH_BLACKLISTS,

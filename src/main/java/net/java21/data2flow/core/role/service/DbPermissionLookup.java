@@ -5,6 +5,9 @@ import net.java21.data2flow.contracts.authz.BuiltinRole;
 import net.java21.data2flow.contracts.authz.Permission;
 import net.java21.data2flow.contracts.authz.PermissionLookup;
 import net.java21.data2flow.contracts.authz.SpaceScope;
+import net.java21.data2flow.contracts.identity.CurrentUser;
+import net.java21.data2flow.contracts.identity.CurrentUserHolder;
+import net.java21.data2flow.core.apitoken.service.ApiTokenGrants;
 import net.java21.data2flow.core.role.domain.RoleModels;
 import net.java21.data2flow.core.role.domain.RoleModels.GrantSource;
 import net.java21.data2flow.core.role.repository.RoleRepository;
@@ -24,14 +27,28 @@ public class DbPermissionLookup implements PermissionLookup {
 
     private final RoleRepository roles;
     private final SpaceDirectory spaces;
+    private final ApiTokenGrants tokens;
 
-    public DbPermissionLookup(RoleRepository roles, SpaceDirectory spaces) {
+    public DbPermissionLookup(RoleRepository roles, SpaceDirectory spaces, ApiTokenGrants tokens) {
         this.roles = roles;
         this.spaces = spaces;
+        this.tokens = tokens;
     }
 
+    /**
+     * 요청 신원이 장기 토큰(API 키·MCP, {@code X-ACCESS-TOKEN-ID})이고 같은 조직·사용자를 묻는 것이면 토큰으로 판정한다(IAM-04.07).
+     * 그 밖(웹 요청, 요청 밖 작업, 다른 사용자 판정)은 사용자 역할로 판정한다.
+     */
     @Override
     public AccessGrant find(long organizationId, long userId) {
+        CurrentUser current = CurrentUserHolder.find().orElse(null);
+        if (current != null && current.viaAccessToken() && current.organizationId() == organizationId && current.userId() == userId) {
+            return tokens.grant(organizationId, userId, current.accessTokenId(), () -> userGrant(organizationId, userId));
+        }
+        return userGrant(organizationId, userId);
+    }
+
+    private AccessGrant userGrant(long organizationId, long userId) {
         return roles.findGrantSource(organizationId, userId)
                 .filter(src -> "ACTIVE".equals(src.status()) && src.role() != null)
                 .map(src -> toGrant(organizationId, src))
