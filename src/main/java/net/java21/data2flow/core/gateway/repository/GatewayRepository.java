@@ -84,6 +84,64 @@ public class GatewayRepository {
                 .param("now", Pg.ts(now)).query(Boolean.class).single();
     }
 
+    /** API-DEV-61 시간별 업링크 수(이 게이트웨이가 받은 신호 기록) */
+    public List<HourCount> findUplinksByHour(long organizationId, String gatewayEui, Instant from, Instant to) {
+        return jdbc.sql("""
+                        SELECT date_trunc('hour', time) AS t, count(*) AS n FROM data2flow_pipeline.link_qualities
+                         WHERE organization_id = :org AND gateway_eui = :eui AND time >= :from AND time < :to GROUP BY 1 ORDER BY 1""")
+                .param("org", organizationId).param("eui", gatewayEui).param("from", Pg.ts(from)).param("to", Pg.ts(to))
+                .query((rs, n) -> new HourCount(Pg.instant(rs, "t"), rs.getLong("n"))).list();
+    }
+
+    /**
+     * API-DEV-61 기기별 평균 rssi·snr과 최적 게이트웨이 비율(DEV-05.02, AT-DEV-11.3). 비율 = 기기가 보낸 업링크(시각) 중 이 게이트웨이가
+     * 가장 센 신호(rssi 최대)로 받은 비율. allowedSpaceIds가 있으면 그 공간의 기기만
+     */
+    public List<DeviceLink> findDeviceLinks(long organizationId, String gatewayEui, Instant from, Instant to, Set<Long> allowedSpaceIds) {
+        return jdbc.sql("""
+                        WITH lq AS (
+                            SELECT l.device_id, l.gateway_eui, l.time, l.rssi, l.snr FROM data2flow_pipeline.link_qualities l
+                             WHERE l.organization_id = :org AND l.time >= :from AND l.time < :to
+                               AND l.device_id IN (SELECT x.device_id FROM data2flow_pipeline.link_qualities x
+                                                    WHERE x.organization_id = :org AND x.gateway_eui = :eui AND x.time >= :from AND x.time < :to)),
+                        best AS (
+                            SELECT DISTINCT ON (device_id, time) device_id, time, gateway_eui FROM lq
+                             ORDER BY device_id, time, rssi DESC NULLS LAST, gateway_eui)
+                        SELECT d.id, d.name, avg(lq.rssi) FILTER (WHERE lq.gateway_eui = :eui) AS avg_rssi,
+                               avg(lq.snr) FILTER (WHERE lq.gateway_eui = :eui) AS avg_snr,
+                               count(*) FILTER (WHERE lq.gateway_eui = :eui) AS uplinks,
+                               (SELECT count(*) FROM best b WHERE b.device_id = d.id AND b.gateway_eui = :eui) AS best_count,
+                               (SELECT count(*) FROM best b WHERE b.device_id = d.id) AS total_count
+                          FROM lq JOIN data2flow_core.devices d ON d.id = lq.device_id AND d.organization_id = :org
+                         WHERE (CAST(:allowed AS bigint[]) IS NULL OR d.space_id = ANY(CAST(:allowed AS bigint[])))
+                         GROUP BY d.id, d.name ORDER BY d.name, d.id""")
+                .param("org", organizationId).param("eui", gatewayEui).param("from", Pg.ts(from)).param("to", Pg.ts(to))
+                .param("allowed", allowedSpaceIds == null ? null : Pg.bigintArray(allowedSpaceIds))
+                .query((rs, n) -> new DeviceLink(rs.getLong("id"), rs.getString("name"), rs.getBigDecimal("avg_rssi"),
+                        rs.getBigDecimal("avg_snr"), rs.getLong("uplinks"), rs.getLong("best_count"), rs.getLong("total_count")))
+                .list();
+    }
+
+    /** API-DEV-61 rssi 분포(10 dBm 칸, 칸 아래 경계) */
+    public List<HistogramBucket> findRssiHistogram(long organizationId, String gatewayEui, Instant from, Instant to) {
+        return jdbc.sql("""
+                        SELECT CAST(floor(rssi / 10) * 10 AS integer) AS bucket, count(*) AS n FROM data2flow_pipeline.link_qualities
+                         WHERE organization_id = :org AND gateway_eui = :eui AND time >= :from AND time < :to AND rssi IS NOT NULL
+                         GROUP BY 1 ORDER BY 1""")
+                .param("org", organizationId).param("eui", gatewayEui).param("from", Pg.ts(from)).param("to", Pg.ts(to))
+                .query((rs, n) -> new HistogramBucket(rs.getInt("bucket"), rs.getLong("n"))).list();
+    }
+
+    public record HourCount(Instant t, long count) {
+    }
+
+    public record DeviceLink(long deviceId, String name, java.math.BigDecimal avgRssi, java.math.BigDecimal avgSnr, long uplinks,
+                             long bestCount, long totalCount) {
+    }
+
+    public record HistogramBucket(int fromDbm, long count) {
+    }
+
     private static String where() {
         return """
                  WHERE g.organization_id = :org AND (CAST(:source AS bigint) IS NULL OR g.source_id = :source)

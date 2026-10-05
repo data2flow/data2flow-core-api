@@ -29,7 +29,14 @@ import net.java21.data2flow.core.device.repository.DeviceQueryRepository;
 import net.java21.data2flow.core.device.repository.DeviceRepository;
 import net.java21.data2flow.core.device.repository.DeviceRepository.NewDevice;
 import net.java21.data2flow.core.device.repository.DiscoveryRepository;
+import net.java21.data2flow.core.common.CountedListResponse;
+import net.java21.data2flow.core.common.FailureWithResponse;
+import net.java21.data2flow.core.device.domain.SqlCondition;
 import net.java21.data2flow.core.devicegroup.service.DynamicGroupMembership;
+import net.java21.data2flow.core.devicesearch.domain.DeviceQueryException;
+import net.java21.data2flow.core.devicesearch.domain.DeviceQueryParser;
+import net.java21.data2flow.core.devicesearch.domain.DeviceQuerySql;
+import net.java21.data2flow.core.workorder.domain.WorkOrderErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
@@ -100,6 +107,66 @@ public class DeviceService {
         return ListApiResponse.of(params, items, queries.count(filter));
     }
 
+    /** 검색식 결과 상한(BR-DEV-35) */
+    static final int SEARCH_RESULT_CAP = 10_000;
+    /** 검색식 시간 제한(BR-DEV-35, 밀리초) */
+    static final int SEARCH_TIMEOUT_MS = 5_000;
+
+    /**
+     * API-DEV-11·133: q가 검색식이면(DEV-13.03) 파싱해 SQL 조건으로 바꾸고, 결과 상한 10,000건·시간 제한 5초를 두고 응답에
+     * {@code counts{total, tookMs}}를 붙인다. 검색식이 아니면 이름·외부 ID 부분 일치(API-DEV-11)이고 counts는 없다.
+     */
+    @Transactional(readOnly = true)
+    public CountedListResponse<DeviceSummaryResponse> search(ListQuery query, Integer page, Integer size) {
+        boolean expression = DeviceQueryParser.looksLikeExpression(query.q());
+        if (!expression) {
+            return CountedListResponse.of(list(query, page, size), null);
+        }
+        long started = System.nanoTime();
+        queries.setStatementTimeout(SEARCH_TIMEOUT_MS);
+        ListApiResponse<DeviceSummaryResponse> result;
+        try {
+            result = list(query, page, size);
+        } catch (org.springframework.dao.DataAccessException ex) {
+            if (isTimeout(ex)) {
+                throw new BusinessException(WorkOrderErrorCode.DEVICE_QUERY_TIMEOUT);
+            }
+            throw ex;
+        }
+        long total = Math.min(result.totalCount(), SEARCH_RESULT_CAP);
+        int pages = (int) Math.ceil(total / (double) result.size());
+        long tookMs = (System.nanoTime() - started) / 1_000_000;
+        Map<String, Object> counts = new LinkedHashMap<>();
+        counts.put("total", total);
+        counts.put("tookMs", tookMs);
+        return new CountedListResponse<>(result.header(), result.page(), result.size(), pages, result.responses(), total, counts);
+    }
+
+    private static boolean isTimeout(Throwable ex) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t instanceof java.sql.SQLException sql && "57014".equals(sql.getSQLState())) {
+                return true;
+            }
+            if (t instanceof org.springframework.dao.QueryTimeoutException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 검색식 → SQL 조건. 구문 오류는 400 DEVICE_QUERY_INVALID + 위치(response.column, AT-DEV-25.2) */
+    SqlCondition compileExpression(String q) {
+        try {
+            return DeviceQuerySql.toSql(DeviceQueryParser.parse(q), clock.instant());
+        } catch (DeviceQueryException ex) {
+            Map<String, Object> where = new LinkedHashMap<>();
+            where.put("column", ex.column());
+            where.put("message", ex.getMessage());
+            throw new FailureWithResponse(WorkOrderErrorCode.DEVICE_QUERY_INVALID,
+                    List.of(new FieldErrorDetail("q", "SYNTAX", ex.getMessage())), where, ex.column());
+        }
+    }
+
     /** 목록 조건을 검증하고 사용자 공간 범위를 붙인다(IAM-04.06) */
     public DeviceFilter filter(ListQuery query) {
         List<FieldErrorDetail> errors = new ArrayList<>();
@@ -120,9 +187,11 @@ public class DeviceService {
         List<String> tags = query.tag() == null ? List.of() : query.tag().stream().filter(t -> t != null && !t.isBlank()).map(String::strip).toList();
         // virtual=true면 가상 기기까지 모두, 없거나 false면 실제 기기만(API-DEV-11 virtual 기본 false)
         Boolean virtual = Boolean.TRUE.equals(query.virtual()) ? null : Boolean.FALSE;
-        return new DeviceFilter(access.organizationId(), PageParams.keyword(query.q()), statuses, connectivity, kinds, modelId, spaceId,
-                query.includeDescendants() == null || query.includeDescendants(), sourceId, tags, groupId, virtual, onboarding,
-                access.allowedSpaces(), null);
+        boolean expression = DeviceQueryParser.looksLikeExpression(query.q());
+        DeviceFilter filter = new DeviceFilter(access.organizationId(), expression ? null : PageParams.keyword(query.q()), statuses,
+                connectivity, kinds, modelId, spaceId, query.includeDescendants() == null || query.includeDescendants(), sourceId, tags,
+                groupId, virtual, onboarding, access.allowedSpaces(), null);
+        return expression ? filter.withExpression(compileExpression(query.q())) : filter;
     }
 
     /** API-DEV-23 */

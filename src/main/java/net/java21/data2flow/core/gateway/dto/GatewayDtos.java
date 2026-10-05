@@ -26,6 +26,21 @@ public final class GatewayDtos {
                                   int offlineAfterSec, long deviceCount24h, long uplinks24h, Instant updatedAt) {
     }
 
+    /** API-DEV-61 기기별 신호(share = 이 게이트웨이가 최적 경로였던 비율 0~1) */
+    public record DeviceSignal(String deviceId, String name, Double avgRssi, Double avgSnr, long uplinks, double share) {
+    }
+
+    public record HourCount(Instant t, long count) {
+    }
+
+    public record RssiBucket(int fromDbm, int toDbm, long count) {
+    }
+
+    /** API-DEV-61 게이트웨이 수신 분포(DEV-05.02) */
+    public record GatewayStatsResponse(String gatewayId, Instant from, Instant to, long deviceCount, List<HourCount> uplinksByHour,
+                                       List<DeviceSignal> devices, List<RssiBucket> rssiHistogram) {
+    }
+
     public record TouchItem(@NotNull Long sourceId, @NotBlank @Size(max = 32) String gatewayEui, Instant seenAt) {
     }
 

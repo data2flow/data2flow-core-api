@@ -4,8 +4,10 @@ import jakarta.validation.Valid;
 import net.java21.data2flow.contracts.web.ApiResponse;
 import net.java21.data2flow.contracts.web.ListApiResponse;
 import net.java21.data2flow.core.gateway.dto.GatewayDtos.GatewayResponse;
+import net.java21.data2flow.core.gateway.dto.GatewayDtos.GatewayStatsResponse;
 import net.java21.data2flow.core.gateway.dto.GatewayDtos.TouchRequest;
 import net.java21.data2flow.core.gateway.service.GatewayService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -15,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
+
+import java.time.Instant;
 
 /** LoRa 게이트웨이(design/api/DEV-api.md §6 API-DEV-60·62, 내부 API-DEV-125, DEV-05.01) */
 @RestController
@@ -39,6 +43,14 @@ public class GatewayController {
     @GetMapping("/core/gateways/{gateway-id}")
     public ApiResponse<GatewayResponse> get(@PathVariable("gateway-id") long gatewayId) {
         return ApiResponse.success(service.get(gatewayId));
+    }
+
+    /** API-DEV-61 수신 분포(DEV-05.02) — DEV_READ */
+    @GetMapping("/core/gateways/{gateway-id}/stats")
+    public ApiResponse<GatewayStatsResponse> stats(@PathVariable("gateway-id") long gatewayId,
+                                                   @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
+                                                   @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
+        return ApiResponse.success(service.stats(gatewayId, from, to));
     }
 
     /** API-DEV-62 — DEV_ADMIN, 200 */

@@ -19,7 +19,7 @@ public class FailureWithResponse extends BusinessException {
         this.response = response;
     }
 
-    /** 문구 인자가 있는 경우(예: EXPORT_TARGET_UNWRITABLE "{0}" 원인) */
+    /** 문구 인자가 있는 경우(예: EXPORT_TARGET_UNWRITABLE "{0}" 원인, COMMISSION_CONFLICT "{0}이(가) {1}에 설치") */
     public FailureWithResponse(ErrorCode code, List<FieldErrorDetail> errors, Object response, Object... args) {
         super(code, errors, args);
         this.response = response;

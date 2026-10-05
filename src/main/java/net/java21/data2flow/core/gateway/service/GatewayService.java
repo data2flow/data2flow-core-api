@@ -13,7 +13,9 @@ import net.java21.data2flow.core.audit.service.Audits;
 import net.java21.data2flow.core.device.domain.DeviceErrorCode;
 import net.java21.data2flow.core.device.domain.References.SourceRef;
 import net.java21.data2flow.core.device.repository.DeviceReferenceRepository;
+import net.java21.data2flow.core.gateway.dto.GatewayDtos;
 import net.java21.data2flow.core.gateway.dto.GatewayDtos.GatewayResponse;
+import net.java21.data2flow.core.gateway.dto.GatewayDtos.GatewayStatsResponse;
 import net.java21.data2flow.core.gateway.dto.GatewayDtos.Ref;
 import net.java21.data2flow.core.gateway.dto.GatewayDtos.TouchItem;
 import net.java21.data2flow.core.gateway.dto.GatewayDtos.TouchRequest;
@@ -84,6 +86,34 @@ public class GatewayService {
     public GatewayResponse get(long gatewayId) {
         roleChecker.require(Permission.DEV_READ);
         return toResponse(load(gatewayId, Permission.DEV_READ));
+    }
+
+    /** API-DEV-61 수신 분포(DEV-05.02, AT-DEV-11.3) — DEV_READ. 기간 기본 최근 24시간, 최대 31일. 권한 범위 밖 기기는 빠진다 */
+    @Transactional(readOnly = true)
+    public GatewayStatsResponse stats(long gatewayId, Instant from, Instant to) {
+        roleChecker.require(Permission.DEV_READ);
+        GatewayRow g = load(gatewayId, Permission.DEV_READ);
+        Instant end = to == null ? clock.instant() : to;
+        Instant start = from == null ? end.minus(java.time.Duration.ofHours(24)) : from;
+        if (!start.isBefore(end) || java.time.Duration.between(start, end).compareTo(java.time.Duration.ofDays(31)) > 0) {
+            throw new BusinessException(CommonErrorCode.INVALID_REQUEST, List.of(new FieldErrorDetail("from", "Range", "0~31d")));
+        }
+        SpaceScope scope = roleChecker.spaceScope();
+        long org = g.organizationId();
+        List<GatewayDtos.DeviceSignal> devices = gateways.findDeviceLinks(org, g.gatewayEui(), start, end,
+                        scope.unrestricted() ? null : scope.allowedSpaceIds()).stream()
+                .map(d -> new GatewayDtos.DeviceSignal(Long.toString(d.deviceId()), d.name(), round(d.avgRssi()), round(d.avgSnr()), d.uplinks(),
+                        d.totalCount() == 0 ? 0 : Math.round(d.bestCount() * 1000.0 / d.totalCount()) / 1000.0))
+                .toList();
+        List<GatewayDtos.HourCount> hours = gateways.findUplinksByHour(org, g.gatewayEui(), start, end).stream()
+                .map(h -> new GatewayDtos.HourCount(h.t(), h.count())).toList();
+        List<GatewayDtos.RssiBucket> histogram = gateways.findRssiHistogram(org, g.gatewayEui(), start, end).stream()
+                .map(b -> new GatewayDtos.RssiBucket(b.fromDbm(), b.fromDbm() + 10, b.count())).toList();
+        return new GatewayStatsResponse(Long.toString(gatewayId), start, end, devices.size(), hours, devices, histogram);
+    }
+
+    private static Double round(java.math.BigDecimal v) {
+        return v == null ? null : v.setScale(1, java.math.RoundingMode.HALF_UP).doubleValue();
     }
 
     /** API-DEV-62 이름·설치 공간·오프라인 기준(60~86400초). 온 키만 바꾼다 */

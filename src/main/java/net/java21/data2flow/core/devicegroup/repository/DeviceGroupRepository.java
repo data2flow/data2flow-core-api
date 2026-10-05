@@ -2,6 +2,9 @@ package net.java21.data2flow.core.devicegroup.repository;
 
 import net.java21.data2flow.contracts.tenancy.OrganizationScopeExempt;
 import net.java21.data2flow.core.common.Pg;
+import net.java21.data2flow.core.device.domain.SqlCondition;
+import net.java21.data2flow.core.devicesearch.domain.DeviceQueryParser;
+import net.java21.data2flow.core.devicesearch.domain.DeviceQuerySql;
 import net.java21.data2flow.core.devicegroup.domain.DeviceGroup;
 import net.java21.data2flow.core.devicegroup.domain.GroupCriteria;
 import net.java21.data2flow.core.devicegroup.domain.GroupCriteria.AttributeCondition;
@@ -237,6 +240,11 @@ public class DeviceGroupRepository {
         if (!c.statuses().isEmpty()) {
             sql.append(" AND d.status = ANY(CAST(:statuses AS text[]))");
             p.put("statuses", Pg.textArray(c.statuses()));
+        }
+        if (c.query() != null) {
+            SqlCondition q = DeviceQuerySql.toSql(DeviceQueryParser.parse(c.query()), null);
+            sql.append(" AND (").append(q.sql()).append(')');
+            p.putAll(q.params());
         }
         int i = 0;
         for (AttributeCondition a : c.attributes()) {

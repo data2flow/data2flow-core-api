@@ -3,6 +3,9 @@ package net.java21.data2flow.core.devicegroup.domain;
 import net.java21.data2flow.contracts.error.BusinessException;
 import net.java21.data2flow.contracts.error.CommonErrorCode;
 import net.java21.data2flow.contracts.error.FieldErrorDetail;
+import net.java21.data2flow.core.devicesearch.domain.DeviceQueryException;
+import net.java21.data2flow.core.devicesearch.domain.DeviceQueryParser;
+import net.java21.data2flow.core.devicesearch.domain.DeviceQuerySql;
 import tools.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
@@ -23,10 +26,17 @@ import java.util.Set;
  * @param statuses    기기 상태(PENDING·ACTIVE·INACTIVE). 비면 모든 상태(삭제 제외)
  */
 public record GroupCriteria(List<Long> modelIds, List<String> modelCodes, List<Long> spaceIds, boolean includeDescendants,
-                            List<String> tagsAny, List<String> tagsAll, List<String> statuses, List<AttributeCondition> attributes) {
+                            List<String> tagsAny, List<String> tagsAll, List<String> statuses, List<AttributeCondition> attributes,
+                            String query) {
+
+    /** 검색식 없이(M2 모양) */
+    public GroupCriteria(List<Long> modelIds, List<String> modelCodes, List<Long> spaceIds, boolean includeDescendants,
+                         List<String> tagsAny, List<String> tagsAll, List<String> statuses, List<AttributeCondition> attributes) {
+        this(modelIds, modelCodes, spaceIds, includeDescendants, tagsAny, tagsAll, statuses, attributes, null);
+    }
 
     private static final Set<String> KEYS = Set.of("models", "modelIds", "spaceIds", "includeDescendants", "tags", "status", "statuses",
-            "attributes");
+            "attributes", "query");
     private static final Set<String> STATUSES = Set.of("PENDING", "ACTIVE", "INACTIVE");
     private static final Map<String, String> OPS = Map.ofEntries(Map.entry("EQ", "EQ"), Map.entry("=", "EQ"), Map.entry("==", "EQ"),
             Map.entry("NE", "NE"), Map.entry("!=", "NE"), Map.entry("GT", "GT"), Map.entry(">", "GT"), Map.entry("GTE", "GTE"),
@@ -39,7 +49,7 @@ public record GroupCriteria(List<Long> modelIds, List<String> modelCodes, List<L
 
     public int size() {
         return modelIds.size() + modelCodes.size() + spaceIds.size() + tagsAny.size() + tagsAll.size() + statuses.size()
-                + attributes.size();
+                + attributes.size() + (query == null ? 0 : 1);
     }
 
     public static GroupCriteria parse(JsonNode node, String field) {
@@ -151,11 +161,22 @@ public record GroupCriteria(List<Long> modelIds, List<String> modelCodes, List<L
                 attributes.add(new AttributeCondition(key, op, value.toString(), null));
             }
         }
+        // 기기 검색식(DEV-13.03, AT-DEV-25.4: 저장된 검색을 동적 그룹 조건으로). 저장 때 구문을 검사하고 계산할 때마다 다시 해석한다
+        String query = null;
+        JsonNode q = node.get("query");
+        if (q != null && !q.isNull()) {
+            query = q.isString() ? q.stringValue().strip() : "";
+            try {
+                DeviceQuerySql.toSql(DeviceQueryParser.parse(query), null);
+            } catch (DeviceQueryException ex) {
+                errors.add(new FieldErrorDetail(field + ".query", "DEVICE_QUERY_INVALID", "column " + ex.column()));
+            }
+        }
         if (!errors.isEmpty()) {
             throw new BusinessException(CommonErrorCode.INVALID_REQUEST, errors);
         }
         GroupCriteria criteria = new GroupCriteria(List.copyOf(modelIds), List.copyOf(modelCodes), List.copyOf(spaceIds),
-                includeDescendants, List.copyOf(any), List.copyOf(all), List.copyOf(statuses), List.copyOf(attributes));
+                includeDescendants, List.copyOf(any), List.copyOf(all), List.copyOf(statuses), List.copyOf(attributes), query);
         if (criteria.size() == 0) {
             throw invalid(field, "EMPTY");
         }
