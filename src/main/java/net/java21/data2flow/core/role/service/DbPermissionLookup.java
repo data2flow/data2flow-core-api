@@ -48,6 +48,11 @@ public class DbPermissionLookup implements PermissionLookup {
         return userGrant(organizationId, userId);
     }
 
+    /** 장기 토큰 주체의 실효 권한(범위 교집합까지, 내부 access-grant API) */
+    public AccessGrant findForToken(long organizationId, long userId, long tokenId) {
+        return tokens.effective(organizationId, userId, tokenId, () -> userGrant(organizationId, userId));
+    }
+
     private AccessGrant userGrant(long organizationId, long userId) {
         return roles.findGrantSource(organizationId, userId)
                 .filter(src -> "ACTIVE".equals(src.status()) && src.role() != null)

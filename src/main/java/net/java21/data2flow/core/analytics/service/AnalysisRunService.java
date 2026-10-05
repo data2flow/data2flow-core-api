@@ -47,12 +47,15 @@ public class AnalysisRunService {
     private final AnalyticsClient analytics;
     private final AnalyticsTemplateService templates;
     private final AnalysisRefRepository refs;
+    private final net.java21.data2flow.core.analytics.repository.AnalysisSettingsRepository settings;
     private final Audits audits;
     private final JsonMapper json;
     private final Clock clock;
 
     public AnalysisRunService(AnalyticsAccess access, AnalyticsClient analytics, AnalyticsTemplateService templates, AnalysisRefRepository refs,
-                              Audits audits, JsonMapper json, Clock clock) {
+                              net.java21.data2flow.core.analytics.repository.AnalysisSettingsRepository settings, Audits audits, JsonMapper json,
+                              Clock clock) {
+        this.settings = settings;
         this.access = access;
         this.analytics = analytics;
         this.templates = templates;
@@ -78,7 +81,7 @@ public class AnalysisRunService {
         JsonNode template = templates.template(ref.templateKey(), version);
         ObjectNode check = json.createObjectNode();
         check.put("version", version);
-        for (String f : new String[]{"bindings", "period", "resolution", "qualityFilter", "includeVirtual"}) {
+        for (String f : new String[]{"bindings", "period", "resolution", "qualityFilter", "includeVirtual", "params"}) {
             if (analysis.has(f)) {
                 check.set(f, analysis.get(f));
             }
@@ -101,6 +104,8 @@ public class AnalysisRunService {
         req.put("analysisId", Long.toString(analysisId));
         req.put("trigger", trigger);
         req.put("mode", mode);
+        // 결과 보관 기간(API-ANA-25, ANA-05.08): analytics는 retention_policies를 읽지 않으므로 실행 요청에 싣는다(새 결과부터)
+        settings.findResultRetention(org).ifPresent(r -> req.put("resultRetentionDays", r.days()));
         InternalHttp.Result res = analytics.send(HttpMethod.POST, "/internal/analytics/runs", null, req, null, AnalyticsErrorCode.ANALYSIS_NOT_FOUND);
         JsonNode r = res.response();
         JsonNode run = r != null && r.has("run") ? r.get("run") : r;
@@ -124,8 +129,9 @@ public class AnalysisRunService {
     static void evaluate(JsonNode check, boolean acknowledged) {
         String level = check == null ? "OK" : check.path("level").asString("OK");
         JsonNode stats = check == null ? null : check.get("stats");
+        // 한도는 실제로 읽을 집계 단위 기준 포인트(stats.points, ANA-api §2.2)로 본다. estimatedRawPoints는 원본 건수(표시용)
         boolean overLimit = stats != null && (stats.path("seriesCount").asInt(0) > MAX_SERIES
-                || stats.path("estimatedRawPoints").asLong(0) > MAX_RAW_POINTS);
+                || stats.path("points").asLong(0) > MAX_RAW_POINTS);
         String suggest = "1h";
         String reason = null;
         if (check != null) {
@@ -187,6 +193,46 @@ public class AnalysisRunService {
         ObjectNode copy = (ObjectNode) r.deepCopy();
         ((ObjectNode) copy.get("run")).remove("errorDetail");
         return copy;
+    }
+
+    /**
+     * 실행 하나를 실행 ID만으로(API-ANA-40 내부 {@code GET /internal/core/analysis-runs/{run-id}}, AIA-01 해설이 요청 사용자 신원으로 부른다).
+     * API-ANA-09와 같은 판정(V 이상, 그 분석이 보여야 함, errorDetail은 I 이상)이고 응답도 같다({run, result}). 없거나 범위 밖이면 404 ANALYSIS_RUN_NOT_FOUND
+     */
+    @Transactional(readOnly = true)
+    public JsonNode getByRun(long runId) {
+        AccessGrant grant = access.view();
+        JsonNode r = analytics.call(HttpMethod.GET, "/internal/analytics/runs/" + runId, null, null, AnalyticsErrorCode.ANALYSIS_RUN_NOT_FOUND);
+        JsonNode run = r == null ? null : r.has("run") ? r.get("run") : r;
+        Long analysisId = run == null ? null : AnalysisService.longOrNull(run.get("analysisId"));
+        if (analysisId == null) {
+            throw new BusinessException(AnalyticsErrorCode.ANALYSIS_RUN_NOT_FOUND);
+        }
+        try {
+            access.visible(analysisId, grant);
+        } catch (BusinessException ex) {
+            throw new BusinessException(AnalyticsErrorCode.ANALYSIS_RUN_NOT_FOUND);
+        }
+        if (access.has(AnalyticsAccess.Rank.INTEGRATOR) || !r.path("run").isObject()) {
+            return r;
+        }
+        ObjectNode copy = (ObjectNode) r.deepCopy();
+        ((ObjectNode) copy.get("run")).remove("errorDetail");
+        return copy;
+    }
+
+    /**
+     * 해설 연결(API-ANA-41 내부 {@code PUT /internal/core/analysis-runs/{run-id}/ai-commentary {commentaryId, generatedAt?}}, ANA-05.04·TC-AIA-003):
+     * ai가 해설을 저장한 뒤 요청 사용자 신원으로 부른다. 결과를 볼 수 있어야 하고(API-ANA-40과 같은 판정) analytics
+     * {@code PUT /internal/analytics/runs/{run-id}/ai-commentary}로 넘긴다
+     */
+    @Transactional(readOnly = true)
+    public void linkCommentary(long runId, JsonNode body) {
+        getByRun(runId);
+        if (body == null || BindingResolver.text(body, "commentaryId") == null) {
+            throw AnalysisService.invalid("commentaryId");
+        }
+        analytics.call(HttpMethod.PUT, "/internal/analytics/runs/" + runId + "/ai-commentary", null, body, AnalyticsErrorCode.ANALYSIS_RUN_NOT_FOUND);
     }
 
     /** 실행 하나(권한 확인 없이). 그 분석의 실행이 아니면 404 ANALYSIS_RUN_NOT_FOUND */

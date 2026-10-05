@@ -73,6 +73,23 @@ public class ApiTokenGrants {
         return new AccessGrant(base.role(), base.permissions(), intersect(base.spaceScope(), tokenScope));
     }
 
+    /**
+     * 토큰 주체의 실효 권한(내부 access-grant용): {@link #grant}에 토큰 범위({@link ApiScope})가 여는 권한을 교집합으로 더 적용한다
+     * (사용자 토큰 = 소유자 역할 권한 ∩ 범위 권한 ∩ 토큰 공간 범위, 서비스 계정 = 범위 권한 ∩ 토큰 공간 범위). 쓸 수 없는 토큰은 none
+     */
+    public AccessGrant effective(long organizationId, long userId, long tokenId, Supplier<AccessGrant> userGrant) {
+        AccessGrant g = grant(organizationId, userId, tokenId, userGrant);
+        if (g.permissions().isEmpty()) {
+            return g;
+        }
+        Set<Permission> scoped = EnumSet.noneOf(Permission.class);
+        for (String code : tokens.find(organizationId, tokenId).map(t -> t.scopes()).orElse(java.util.List.of())) {
+            ApiScope.fromCode(code).ifPresent(s -> scoped.addAll(s.permissions()));
+        }
+        scoped.retainAll(g.permissions());
+        return new AccessGrant(g.role(), scoped, g.spaceScope());
+    }
+
     static SpaceScope intersect(SpaceScope a, SpaceScope b) {
         if (a.unrestricted()) {
             return b;

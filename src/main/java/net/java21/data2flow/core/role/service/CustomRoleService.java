@@ -145,7 +145,23 @@ public class CustomRoleService {
     /** 다른 서비스의 PermissionLookup이 묻는 내부 판정(조직이 다르거나 비활성이면 권한 없음) */
     @Transactional(readOnly = true)
     public AccessGrantResponse accessGrant(long organizationId, long userId) {
-        AccessGrant grant = permissionLookup.find(organizationId, userId);
+        return accessGrant(organizationId, userId, null);
+    }
+
+    /**
+     * 내부 권한 판정. 장기 토큰 주체(쿼리 {@code accessTokenId} 또는 같은 사용자의 {@code X-ACCESS-TOKEN-ID} 헤더)면 토큰을 다시 찾아
+     * 소유자 권한 ∩ 토큰 범위 권한 ∩ 토큰 공간 범위로 판정한다(서비스 계정은 범위 권한만, IAM-05·IAM-04.07). 쓸 수 없는 토큰은 active=false
+     */
+    public AccessGrantResponse accessGrant(long organizationId, long userId, Long accessTokenId) {
+        Long tokenId = accessTokenId;
+        if (tokenId == null) {
+            tokenId = net.java21.data2flow.contracts.identity.CurrentUserHolder.find()
+                    .filter(u -> u.viaAccessToken() && u.organizationId() == organizationId && u.userId() == userId)
+                    .map(net.java21.data2flow.contracts.identity.CurrentUser::accessTokenId).orElse(null);
+        }
+        AccessGrant grant = tokenId != null && permissionLookup instanceof DbPermissionLookup db
+                ? db.findForToken(organizationId, userId, tokenId)
+                : permissionLookup.find(organizationId, userId);
         boolean active = !grant.permissions().isEmpty() || !"NONE".equals(grant.role());
         return new AccessGrantResponse(Long.toString(userId), Long.toString(organizationId), active, active ? grant.role() : null,
                 grant.permissions().stream().map(Enum::name).sorted().toList(),

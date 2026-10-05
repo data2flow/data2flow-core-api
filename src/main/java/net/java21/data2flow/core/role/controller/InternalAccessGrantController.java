@@ -20,10 +20,14 @@ public class InternalAccessGrantController {
         this.service = service;
     }
 
-    /** 내부 권한 판정(IAM-04.01·04.05) — 내부(모든 서비스), 200. 없는 사용자·비활성·다른 조직은 active=false */
+    /**
+     * 내부 권한 판정(IAM-04.01·04.05) — 내부(모든 서비스), 200. 없는 사용자·비활성·다른 조직은 active=false.
+     * 장기 토큰 주체는 {@code ?accessTokenId=}(또는 같은 사용자의 X-ACCESS-TOKEN-ID 헤더)로 토큰 범위까지 교집합한 권한(IAM-05)
+     */
     @GetMapping("/internal/core/organizations/{organization-id}/users/{user-id}/access-grant")
     public ApiResponse<AccessGrantResponse> accessGrant(@PathVariable("organization-id") long organizationId,
-                                                        @PathVariable("user-id") long userId) {
-        return ApiResponse.success(service.accessGrant(organizationId, userId));
+                                                        @PathVariable("user-id") long userId,
+                                                        @org.springframework.web.bind.annotation.RequestParam(required = false) Long accessTokenId) {
+        return ApiResponse.success(service.accessGrant(organizationId, userId, accessTokenId));
     }
 }

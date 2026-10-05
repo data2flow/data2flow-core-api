@@ -22,6 +22,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -304,6 +306,51 @@ class AnalyticsIT extends AnalyticsItSupport {
                 .andExpect(status().isForbidden());
         mvc.perform(json(as(org, analyst, post("/core/analytics/analyses/" + id + "/runs/501/export")), "{\"format\":\"PDF\"}"))
                 .andExpect(status().isAccepted()).andExpect(jsonPath("$.response.exportJobId").value("9"));
+    }
+
+    private String token(long user, String scopes) throws Exception {
+        MvcResult r = mvc.perform(json(as(org, user, post("/core/api-tokens")), "{\"kind\":\"MCP\",\"name\":\"t" + UUID.randomUUID()
+                .toString().substring(0, 8) + "\",\"scopes\":[" + scopes + "],\"expiresAt\":\"" + clock.instant().plus(Duration.ofDays(5)) + "\"}"))
+                .andExpect(status().isCreated()).andReturn();
+        return read(r, "$.response.id");
+    }
+
+    @Test
+    @DisplayName("[IAM-04.07][AIA-08.01][AIA-01.01] MCP 토큰 주체로 결과 읽기: read:analytics 200·read:devices 403, 내부 API-ANA-40(실행 ID만) 같은 판정, access-grant는 범위 교집합")
+    void tokenPrincipals() throws Exception {
+        String id = create(analyst, "anomaly-detect", bindings("target", deviceA, "co2"), null);
+        stubRun("501", id, "SUCCEEDED");
+        String analytics = token(analyst, "\"read:analytics\"");
+        String devices = token(analyst, "\"read:devices\"");
+        mvc.perform(as(org, analyst, get("/core/analytics/analyses/" + id + "/runs/501")).header("X-ACCESS-TOKEN-ID", analytics)
+                .header("X-TOKEN-SCOPE", "read:analytics")).andExpect(status().isOk());
+        mvc.perform(as(org, analyst, get("/core/analytics/analyses/" + id + "/runs/501")).header("X-ACCESS-TOKEN-ID", devices)
+                .header("X-TOKEN-SCOPE", "read:devices")).andExpect(status().isForbidden());
+        mvc.perform(as(org, analyst, post("/core/analytics/analyses/" + id + "/runs")).header("X-ACCESS-TOKEN-ID", analytics)
+                .header("X-TOKEN-SCOPE", "read:analytics")).andExpect(status().isForbidden());
+
+        mvc.perform(as(org, viewer, get("/internal/core/analysis-runs/501"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.response.run.analysisId").value(id)).andExpect(jsonPath("$.response.run.errorDetail").doesNotExist());
+        STUB.on("PUT", "/internal/analytics/runs/501/ai-commentary", r -> new StubHttpServer.Reply(204, null, Map.of()));
+        mvc.perform(json(as(org, viewer, put("/internal/core/analysis-runs/501/ai-commentary")), "{\"commentaryId\":\"c-9\"}"))
+                .andExpect(status().isNoContent());
+        assertThat(STUB.received("PUT", "/internal/analytics/runs/501/ai-commentary").getFirst().body()).contains("c-9");
+        mvc.perform(json(as(org, viewer, put("/internal/core/analysis-runs/501/ai-commentary")), "{}")).andExpect(status().isBadRequest());
+        stubRun("502", "9999", "SUCCEEDED");
+        mvc.perform(as(org, viewer, get("/internal/core/analysis-runs/502"))).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.header.resultCode").value("ANALYSIS_RUN_NOT_FOUND"));
+
+        // access-grant: 토큰 주체는 소유자 권한 ∩ 범위 권한
+        mvc.perform(get("/internal/core/organizations/" + org + "/users/" + analyst + "/access-grant?accessTokenId=" + analytics))
+                .andExpect(jsonPath("$.response.active").value(true))
+                .andExpect(jsonPath("$.response.permissions").value(containsInAnyOrder("ANALYTICS_READ", "ENE_READ")));
+        mvc.perform(as(org, analyst, get("/internal/core/organizations/" + org + "/users/" + analyst + "/access-grant"))
+                        .header("X-ACCESS-TOKEN-ID", devices).header("X-TOKEN-SCOPE", "read:devices"))
+                .andExpect(jsonPath("$.response.permissions").value(containsInAnyOrder("DEV_READ", "FLOW_READ")));
+        mvc.perform(get("/internal/core/organizations/" + org + "/users/" + analyst + "/access-grant"))
+                .andExpect(jsonPath("$.response.permissions.length()").value(greaterThan(5)));
+        mvc.perform(get("/internal/core/organizations/" + org + "/users/" + viewer + "/access-grant?accessTokenId=" + analytics))
+                .andExpect(jsonPath("$.response.active").value(false));
     }
 
     @Test
