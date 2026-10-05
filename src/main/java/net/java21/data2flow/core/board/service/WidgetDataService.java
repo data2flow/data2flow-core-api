@@ -1,6 +1,7 @@
 package net.java21.data2flow.core.board.service;
 
 import net.java21.data2flow.contracts.authz.SpaceScope;
+import net.java21.data2flow.core.analytics.service.AnalysisWidgetData;
 import net.java21.data2flow.contracts.error.BusinessException;
 import net.java21.data2flow.contracts.error.FieldErrorDetail;
 import net.java21.data2flow.core.board.domain.BoardErrorCode;
@@ -67,11 +68,13 @@ public class WidgetDataService {
     private static final Set<String> ALL_SEVERITIES = Set.of("CRITICAL", "MAJOR", "MINOR", "WARNING", "INFO");
 
     private final WidgetDataRepository data;
+    private final AnalysisWidgetData analysis;
     private final JsonMapper json;
     private final Clock clock;
 
-    public WidgetDataService(WidgetDataRepository data, JsonMapper json, Clock clock) {
+    public WidgetDataService(WidgetDataRepository data, AnalysisWidgetData analysis, JsonMapper json, Clock clock) {
         this.data = data;
+        this.analysis = analysis;
         this.json = json;
         this.clock = clock;
     }
@@ -110,6 +113,8 @@ public class WidgetDataService {
             case "status-list" -> statusList(ctx, targets);
             case "alarm-list" -> alarmList(ctx, targets, options);
             case "floorplan" -> floorplan(ctx, targets.getFirst(), options);
+            case "analysis" -> analysis.data(ctx.organizationId(), ctx.scope(), options,
+                    () -> new BusinessException(BoardErrorCode.WIDGET_DATA_FORBIDDEN));
             default -> null; // markdown: 데이터 없음(내용은 위젯 옵션)
         };
         return new WidgetData(type.type(), result);

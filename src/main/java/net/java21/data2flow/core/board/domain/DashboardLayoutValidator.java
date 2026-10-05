@@ -142,6 +142,13 @@ public final class DashboardLayoutValidator {
             throw new BusinessException(BoardErrorCode.WIDGET_QUERY_INVALID, errors);
         }
         JsonNode options = w.get("options");
+        if ("analysis".equals(wt.type())) {
+            JsonNode id = options == null ? null : options.get("analysisId");
+            boolean ok = id != null && (id.isIntegralNumber() && id.asLong() > 0 || id.isString() && id.asString().matches("[1-9][0-9]{0,18}"));
+            if (!ok) {
+                throw layout(List.of(new FieldErrorDetail(field + ".options.analysisId", "REQUIRED", "id")));
+            }
+        }
         if (options != null && !options.isNull()) {
             List<FieldErrorDetail> optionErrors = new ArrayList<>();
             if (!options.isObject()) {

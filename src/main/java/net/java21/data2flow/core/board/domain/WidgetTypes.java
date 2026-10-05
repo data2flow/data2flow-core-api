@@ -8,7 +8,8 @@ import java.util.Set;
 
 /**
  * 위젯 종류와 대상 규칙(design/api/DSH-api.md §3 위젯 옵션, API-DSH-13). M5에서 데이터를 주는 종류만 저장할 수 있다.
- * 제어(control, DSH-04.03 M7)·분석(analysis, M6)·KPI(kpi, M6)는 그 기능이 생길 때 열고 지금은 WIDGET_TYPE_UNSUPPORTED다.
+ * 제어(control, DSH-04.03 M7)·KPI(kpi, ANA-09.03 M7)는 그 기능이 생길 때 열고 지금은 WIDGET_TYPE_UNSUPPORTED다.
+ * 분석 결과(analysis, DSH-04.04)는 M6에서 열었다: 대상 없이 옵션 {@code analysisId}(필수)·{@code chartId}·{@code show}·{@code metricKeys}.
  */
 public final class WidgetTypes {
 
@@ -26,7 +27,7 @@ public final class WidgetTypes {
     }
 
     /** 나중 마일스톤에서 여는 종류(문서 §3에는 있음) */
-    public static final Set<String> DEFERRED = Set.of("control", "analysis", "kpi");
+    public static final Set<String> DEFERRED = Set.of("control", "kpi");
 
     private static final Map<String, WidgetType> TYPES = new LinkedHashMap<>();
 
@@ -49,6 +50,8 @@ public final class WidgetTypes {
                 "severities", array(), "states", array(), "maxRows", integer(5, 50), "showAck", bool()));
         add("floorplan", "평면도", 1, 1, List.of(SPACE), props("metricKey", str(), "heat", bool()));
         add("markdown", "메모", 0, 0, List.of(), props("content", Map.of("type", "string", "maxLength", 10_000)));
+        add("analysis", "분석 결과", 0, 0, List.of(), props("analysisId", Map.of("type", "id"), "chartId", str(),
+                "show", enumOf("chart", "metrics", "both"), "metricKeys", array()));
     }
 
     private WidgetTypes() {

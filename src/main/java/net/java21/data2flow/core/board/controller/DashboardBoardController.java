@@ -18,6 +18,7 @@ import net.java21.data2flow.core.board.dto.BoardDtos.WidgetData;
 import net.java21.data2flow.core.board.dto.BoardDtos.WidgetDataRequest;
 import net.java21.data2flow.core.board.dto.BoardDtos.WidgetPreviewRequest;
 import net.java21.data2flow.core.board.dto.BoardDtos.WidgetTypeResponse;
+import net.java21.data2flow.core.board.service.AnalysisPinService;
 import net.java21.data2flow.core.board.service.DashboardBoardService;
 import net.java21.data2flow.core.board.service.ShareLinkService;
 import org.springframework.http.HttpHeaders;
@@ -42,8 +43,10 @@ public class DashboardBoardController {
 
     private final DashboardBoardService service;
     private final ShareLinkService shareLinks;
+    private final AnalysisPinService pins;
 
-    public DashboardBoardController(DashboardBoardService service, ShareLinkService shareLinks) {
+    public DashboardBoardController(DashboardBoardService service, ShareLinkService shareLinks, AnalysisPinService pins) {
+        this.pins = pins;
         this.service = service;
         this.shareLinks = shareLinks;
     }
@@ -112,6 +115,13 @@ public class DashboardBoardController {
     public ApiResponse<WidgetData> widgetData(@PathVariable("dashboard-id") long id, @PathVariable("widget-id") String widgetId,
                                               @RequestBody(required = false) WidgetDataRequest request) {
         return ApiResponse.success(service.widgetData(id, widgetId, request));
+    }
+
+    /** API-DSH-08 분석 결과 위젯 고정(DSH-04.04) — {dashboardId, widgetId, version} */
+    @PostMapping("/core/dashboards/{dashboard-id}/widgets/pin-analysis")
+    public ApiResponse<java.util.Map<String, Object>> pinAnalysis(@PathVariable("dashboard-id") long id,
+                                                                 @RequestBody(required = false) tools.jackson.databind.JsonNode body) {
+        return ApiResponse.success(pins.pin(id, body));
     }
 
     /** API-DSH-09 미리 보기 */

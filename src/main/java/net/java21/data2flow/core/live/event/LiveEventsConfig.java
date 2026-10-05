@@ -5,6 +5,7 @@ import net.java21.data2flow.contracts.message.EventType;
 import net.java21.data2flow.contracts.message.MessageCodec;
 import net.java21.data2flow.contracts.message.MessageFormatException;
 import net.java21.data2flow.contracts.messaging.MessagingNames;
+import net.java21.data2flow.core.live.service.AnalysisRunStreams;
 import net.java21.data2flow.core.live.service.LiveHub;
 import net.java21.data2flow.core.live.service.SimRunStreams;
 import org.slf4j.Logger;
@@ -19,6 +20,9 @@ import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,6 +65,7 @@ public class LiveEventsConfig {
     }
 
     private static final Logger log = LoggerFactory.getLogger(LiveEventsConfig.class);
+    static final String ANALYTICS_RUN_BINDING = "analytics.run.*";
 
     private final String queueName = "core.live." + UUID.randomUUID();
 
@@ -71,19 +76,43 @@ public class LiveEventsConfig {
         for (EventType type : TYPES) {
             all.add(new Binding(queueName, Binding.DestinationType.QUEUE, MessagingNames.EXCHANGE_EVENTS, type.routingKey(), null));
         }
+        // M6: 분석 실행 상태(EVT-ANA-01, 계약 모듈에 아직 없는 종류) → 실행 상태 스트림(API-ANA-16)
+        all.add(new Binding(queueName, Binding.DestinationType.QUEUE, MessagingNames.EXCHANGE_EVENTS, ANALYTICS_RUN_BINDING, null));
         return new Declarables(all);
     }
 
     @Bean
     SimpleMessageListenerContainer liveEventsContainer(ConnectionFactory connectionFactory, MessageCodec codec, LiveHub hub,
-                                                       SimRunStreams simRuns) {
+                                                       SimRunStreams simRuns, AnalysisRunStreams analysisRuns, JsonMapper json) {
         SimpleMessageListenerContainer container = new SimpleMessageListenerContainer(connectionFactory);
         container.setQueueNames(queueName);
         container.setAcknowledgeMode(AcknowledgeMode.NONE);
         container.setExclusive(true);
         container.setMissingQueuesFatal(false);
-        container.setMessageListener(message -> deliver(codec, hub, simRuns, message.getBody()));
+        container.setMessageListener(message -> {
+            if (!deliverAnalytics(json, analysisRuns, message.getBody())) {
+                deliver(codec, hub, simRuns, message.getBody());
+            }
+        });
         return container;
+    }
+
+    /** 분석 실행 상태(EVT-ANA-01)면 실행 스트림에 넘기고 true. 다른 종류면 false */
+    static boolean deliverAnalytics(JsonMapper json, AnalysisRunStreams analysisRuns, byte[] body) {
+        try {
+            JsonNode tree = json.readTree(body);
+            String type = tree.path("type").asString("");
+            if (!type.startsWith("analytics.run.")) {
+                return false;
+            }
+            if (tree.path("organizationId").canConvertToLong() && tree.path("payload").isObject()) {
+                analysisRuns.onEvent(tree.get("organizationId").asLong(), tree.get("payload"));
+            }
+            return true;
+        } catch (RuntimeException ex) {
+            log.debug("실시간 화면 이벤트 형식 오류라 버립니다: {}", ex.toString());
+            return false;
+        }
     }
 
     /** 한 건 전달. 형식 오류·모르는 종류·처리 실패는 버린다(화면용 손실 허용) */

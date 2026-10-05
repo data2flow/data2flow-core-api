@@ -39,6 +39,10 @@ data2flow:
       sim-tick-enabled: false
       seed-on-startup: false
       relay-timeout: 3s
+    # M6: analytics·ai 주소는 IT가 대역 서버로 바꾼다. 일정 실행기는 테스트가 직접 부른다
+    analytics:
+      scheduler-enabled: false
+      relay-timeout: 3s
 logging:
   level:
     net.java21.data2flow: INFO
