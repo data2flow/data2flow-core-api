@@ -113,6 +113,30 @@ Flyway `V202610120900`(보관·스크립트)·`0910`(외부 맥락·달력)·`09
 | `DATA2FLOW_EDGE_AGENT_VERSIONS`(기본 1.0.0)·`DATA2FLOW_EDGE_IMAGE` | 엣지 에이전트 게시 버전(마지막이 최신)·이미지 |
 | `DATA2FLOW_STORAGE_DISK_CAPACITY_BYTES`(기본 0 = 계산 안 함) | 저장 지표 디스크 여유 % |
 
+## M6 분석·AI (ANA·IAM-05·DSH-04.04·DEV-10.02·SCR-03.07)
+
+분석 정의·실행·결과의 원천은 analytics(`data2flow_analytics`)이고, core는 권한(V·A·O·I·AD 표기 → `ANALYTICS_READ`·`ANALYTICS_RUN`·역할 순위)·공간 범위(BR-ANA-03)·바인딩(BR-ANA-02)·일정 형식을 확인한 뒤 analytics 내부 API(ANA-api §2)로 넘깁니다.
+Flyway `V202610190900`(분석 색인 `analysis_refs`)·`V202610190910`(payload 스키마·토픽 템플릿, M5 남은 것), 모두 추가만.
+
+- 외부 API `/core/analytics/**`(API-ANA-01~25): 템플릿 목록·검색(KEYWORD)·실행 가능성·후보, 충분성 확인, 분석 CRUD·목록(색인으로 거르고 페이징), 실행 요청(충분성 재확인 → API-ANA-33), 결과·이력·비교·취소·내보내기, 실시간·이력, 재학습·모델, 피드백, 데이터셋, KPI, 템플릿 설정, 결과 보관 기간(`retention_policies` ANALYSIS_RESULT).
+- 실행 상태 스트림 `GET /core/stream/analytics/runs/{run-id}`(API-ANA-16, `run-status`·`run-done`): EVT-ANA-01(파드별 임시 큐) + 2초마다 실행 상태 다시 읽기.
+- 일정 실행기(1분, `analysis_refs` 행 잠금 SKIP LOCKED): 조직 시간대 cron으로 때가 되면 소유자 신원으로 `trigger=SCHEDULE` 실행 요청. EVT-ANA-05 → `STOPPED_BY_FAILURE`, 템플릿 끄기 → PAUSED(BR-ANA-17).
+- 받는 이벤트(`core.events`, 계약 모듈에 아직 없는 종류라 `RawEventHandler`): `analytics.run.*`, `analytics.schedule.stopped`.
+- 대시보드 `analysis` 위젯(최근 성공 결과의 차트·핵심 수치, 지운 분석은 `deleted`)·고정 `POST /core/dashboards/{id}/widgets/pin-analysis`(API-DSH-08). 사이트 요약 `comfortScore`(쾌적도 분석 최근 성공 결과).
+- 스크립트 AI 초안 `POST /core/scripts/ai-draft`(API-SCR-16) → ai `POST /internal/ai/script-drafts`, 장애·한도 503 `SCRIPT_AI_UNAVAILABLE`.
+- 장기 토큰·서비스 계정(IAM-05, API-IAM-40~46): 원문 1회·SHA-256만 저장, 만료 필수 1년 이내, 조직 50개, 쓰기·제어 범위는 ADMIN 승인, 교체 유예 0~24시간,
+  `POST /internal/core/api-tokens/verify`(auth introspection, `rateLimitPerMin` 포함). 토큰 요청(`X-ACCESS-TOKEN-ID`)은 토큰을 다시 찾아 판정한다(사용자 역할 ∩ 토큰 공간 범위, 서비스 계정은 범위 권한만).
+  폐기·교체 유예 끝·서비스 계정·사용자 비활성화는 auth에 `tokenIds`로 알려 gateway 캐시를 지운다(API-IAM-37b).
+  **ai가 사용자를 대신해 core를 부를 때는 `X-USER-ID`·`X-ORG-ID`와 함께 장기 토큰 요청이면 `X-ACCESS-TOKEN-ID`·`X-TOKEN-SCOPE`도 그대로 넘겨야 합니다.**
+- M5 남은 것(DSC-09.07·09.08, ADR-056): payload 스키마 업로드 `POST /core/sources/{id}/payload-schema`(API-DSC-59, ingress API-DSC-82 검사), 내부 `GET /internal/core/payload-schemas/{schema-ref}`(API-DSC-81),
+  토픽 템플릿 미리보기 `POST /core/sources/topic-templates/preview`(ingress API-DSC-83 중계), 소스 설정 `payload`·`topicTemplate` → API-DSC-50 `config`.
+
+| 환경변수 | 용도 |
+|---|---|
+| `DATA2FLOW_ANALYTICS_BASE_URL`(기본 `http://data2flow-analytics`) | analytics 내부 API |
+| `DATA2FLOW_AI_BASE_URL`(기본 `http://data2flow-ai`) | ai 내부 API(스크립트 AI 초안) |
+| `DATA2FLOW_ANALYSIS_SCHEDULER_ENABLED`(기본 true, local false) | 분석 일정 실행기·실행 스트림 주기 조회 |
+
 ## 작업 규칙
 
 스펙 ID에서 시작하고(인수 테스트 → 테스트 케이스 → 구현), 브랜치·PR·테스트 이름에 스펙 ID를 남깁니다. 1.0 전에는 `main` + `feat/<스펙ID>-<요약>`, 1.0 뒤에는 버전 브랜치 `feature/vX.Y`를 씁니다(ADR-039).
