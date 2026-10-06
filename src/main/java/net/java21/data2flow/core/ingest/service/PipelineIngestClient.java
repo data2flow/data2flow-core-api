@@ -1,5 +1,6 @@
 package net.java21.data2flow.core.ingest.service;
 
+import net.java21.data2flow.contracts.http.InternalHttpClients;
 import net.java21.data2flow.contracts.error.BusinessException;
 import net.java21.data2flow.contracts.error.CommonErrorCode;
 import net.java21.data2flow.contracts.identity.DataflowHeaders;
@@ -43,7 +44,7 @@ public class PipelineIngestClient {
             .disable(tools.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
 
     public PipelineIngestClient(CoreProperties properties) {
-        HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+        HttpClient http = InternalHttpClients.create(Duration.ofSeconds(2));
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(http);
         factory.setReadTimeout(Duration.ofSeconds(35));
         this.client = RestClient.builder().baseUrl(properties.pipelineBaseUrl()).requestFactory(factory).build();

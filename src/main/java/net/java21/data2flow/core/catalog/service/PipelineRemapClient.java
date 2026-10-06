@@ -1,5 +1,6 @@
 package net.java21.data2flow.core.catalog.service;
 
+import net.java21.data2flow.contracts.http.InternalHttpClients;
 import net.java21.data2flow.contracts.identity.DataflowHeaders;
 import net.java21.data2flow.core.config.CoreProperties;
 import org.springframework.http.MediaType;
@@ -25,7 +26,7 @@ public class PipelineRemapClient {
     private final RestClient client;
 
     public PipelineRemapClient(CoreProperties properties) {
-        HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+        HttpClient http = InternalHttpClients.create(Duration.ofSeconds(2));
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(http);
         factory.setReadTimeout(Duration.ofSeconds(5));
         this.client = RestClient.builder().baseUrl(properties.pipelineBaseUrl()).requestFactory(factory).build();

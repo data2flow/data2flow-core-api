@@ -1,5 +1,6 @@
 package net.java21.data2flow.core.script.service;
 
+import net.java21.data2flow.contracts.http.InternalHttpClients;
 import net.java21.data2flow.contracts.error.BusinessException;
 import net.java21.data2flow.contracts.error.CommonErrorCode;
 import net.java21.data2flow.contracts.identity.DataflowHeaders;
@@ -43,7 +44,7 @@ public class PipelineScriptClient {
     }
 
     private static RestClient client(String baseUrl, Duration readTimeout) {
-        HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build();
+        HttpClient http = InternalHttpClients.create(Duration.ofSeconds(1));
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(http);
         factory.setReadTimeout(readTimeout);
         return RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();

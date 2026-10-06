@@ -1,5 +1,6 @@
 package net.java21.data2flow.core.source.service;
 
+import net.java21.data2flow.contracts.http.InternalHttpClients;
 import net.java21.data2flow.contracts.error.BusinessException;
 import net.java21.data2flow.contracts.error.CommonErrorCode;
 import net.java21.data2flow.contracts.identity.DataflowHeaders;
@@ -48,7 +49,7 @@ public class IngressClient {
 
     public IngressClient(CoreProperties properties, JsonMapper json) {
         this.baseUrl = properties.ingressBaseUrl();
-        this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+        this.http = InternalHttpClients.create(Duration.ofSeconds(2));
         this.json = json;
     }
 

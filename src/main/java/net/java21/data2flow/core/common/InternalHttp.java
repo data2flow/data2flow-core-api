@@ -1,5 +1,6 @@
 package net.java21.data2flow.core.common;
 
+import net.java21.data2flow.contracts.http.InternalHttpClients;
 import net.java21.data2flow.contracts.error.BusinessException;
 import net.java21.data2flow.contracts.error.CommonErrorCode;
 import net.java21.data2flow.contracts.identity.CurrentUser;
@@ -50,7 +51,7 @@ public final class InternalHttp {
     public InternalHttp(String name, String baseUrl, Duration readTimeout, JsonMapper json) {
         this.name = name;
         this.json = json;
-        HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+        HttpClient http = InternalHttpClients.create(Duration.ofSeconds(2));
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(http);
         factory.setReadTimeout(readTimeout);
         this.client = RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();

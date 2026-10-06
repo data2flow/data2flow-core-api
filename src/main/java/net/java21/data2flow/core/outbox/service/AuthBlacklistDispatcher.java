@@ -1,5 +1,6 @@
 package net.java21.data2flow.core.outbox.service;
 
+import net.java21.data2flow.contracts.http.InternalHttpClients;
 import net.java21.data2flow.contracts.identity.DataflowHeaders;
 import net.java21.data2flow.core.config.CoreProperties;
 import net.java21.data2flow.core.outbox.repository.OutboxRepository.OutboxMessage;
@@ -23,7 +24,7 @@ public class AuthBlacklistDispatcher implements OutboxDispatcher {
     private final RestClient client;
 
     public AuthBlacklistDispatcher(CoreProperties properties) {
-        HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build();
+        HttpClient http = InternalHttpClients.create(Duration.ofSeconds(1));
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(http);
         factory.setReadTimeout(Duration.ofSeconds(2));
         this.client = RestClient.builder().baseUrl(properties.authBaseUrl()).requestFactory(factory).build();
