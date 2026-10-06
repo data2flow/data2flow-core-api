@@ -524,12 +524,13 @@ class AnalyticsIT extends AnalyticsItSupport {
     @Test
     @DisplayName("[SCR-03.07][AIA-04.01] 스크립트 AI 초안 중계(API-SCR-16): SCRIPT_WRITE만, ai 내부 API 응답 그대로, ai 장애·한도 503 SCRIPT_AI_UNAVAILABLE — TC-SCR-063·065")
     void scriptAiDraft() throws Exception {
-        String req = "{\"kind\":\"TRANSFORM\",\"requirement\":\"이슬점 추가\",\"sampleRawMessageIds\":[\"1\"]}";
-        STUB.ok("POST", "/internal/ai/script-drafts", 200, "{\"code\":\"return msg;\",\"explanation\":\"설명\",\"testRun\":{\"ok\":true}}");
+        // 원본 샘플 해석·정적 검사·테스트 실행 붙이기는 ScriptAiDraftIT(pipeline 대역)에서 본다
+        String req = "{\"kind\":\"TRANSFORM\",\"requirement\":\"이슬점 추가\"}";
+        STUB.ok("POST", "/internal/ai/script-drafts", 200, "{\"code\":\"return msg;\",\"explanation\":\"설명\"}");
         mvc.perform(json(as(org, operator, post("/core/scripts/ai-draft")), req)).andExpect(status().isForbidden());
         mvc.perform(json(as(org, integrator, post("/core/scripts/ai-draft")), "{\"kind\":\"X\",\"requirement\":\"a\"}")).andExpect(status().isBadRequest());
         mvc.perform(json(as(org, integrator, post("/core/scripts/ai-draft")), req)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.response.code").value("return msg;")).andExpect(jsonPath("$.response.testRun.ok").value(true));
+                .andExpect(jsonPath("$.response.code").value("return msg;")).andExpect(jsonPath("$.response.explanation").value("설명"));
         assertThat(STUB.received("POST", "/internal/ai/script-drafts").getFirst().header("X-USER-ID")).isEqualTo(Long.toString(integrator));
         STUB.fail("POST", "/internal/ai/script-drafts", 429, "AI_QUOTA_EXCEEDED", null);
         mvc.perform(json(as(org, integrator, post("/core/scripts/ai-draft")), req)).andExpect(status().isServiceUnavailable())

@@ -38,6 +38,7 @@ final class PipelineStubServer {
                         + "\"diff\":{\"added\":[{\"key\":\"dew_point\",\"value\":9.4}],\"removed\":[],\"changed\":[]},"
                         + "\"logs\":[{\"at\":\"2026-10-03T00:00:00Z\",\"message\":\"x 3\"}],\"durationMs\":0.4,\"outputBytes\":42}"));
         server.createContext("/internal/pipeline/", this::generic);
+        server.createContext("/internal/ai/", this::generic);
         server.start();
     }
 

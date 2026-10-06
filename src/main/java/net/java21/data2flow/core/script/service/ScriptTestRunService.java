@@ -118,6 +118,21 @@ public class ScriptTestRunService {
         return pipeline.testRun(body);
     }
 
+    /**
+     * AI 초안 샘플(API-SCR-16 {@code sampleRawMessageIds})을 DECODE 입력 모양으로 꺼낸다. 테스트 실행과 같은 규칙: 같은 조직이고
+     * 기기가 정해졌다면 그 공간이 권한 범위 안이어야 한다(밖·없음 404)
+     */
+    public JsonNode sampleInput(long orgId, String rawMessageId) {
+        RawMessageRef raw = targets.findRawMessage(orgId, ScriptSupport.parseId(rawMessageId, "sampleRawMessageIds"))
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.RESOURCE_NOT_FOUND));
+        if (raw.deviceId() != null) {
+            DeviceRef device = targets.findDevice(orgId, raw.deviceId())
+                    .orElseThrow(() -> new BusinessException(CommonErrorCode.RESOURCE_NOT_FOUND));
+            roleChecker.requireSpace(device.spaceId(), CommonErrorCode.RESOURCE_NOT_FOUND);
+        }
+        return rawInput(raw);
+    }
+
     /** DECODE 입력 모양(design/api/SCR-api.md §3.1 DecodeInput)으로 원본을 바꾼다 */
     private JsonNode rawInput(RawMessageRef raw) {
         ObjectNode node = json.createObjectNode();

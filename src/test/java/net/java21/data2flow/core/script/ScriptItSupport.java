@@ -14,7 +14,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 스크립트 통합 테스트 기반: pipeline 대역(API-SCR-30·31)을 {@code data2flow.core.pipeline-base-url}로 연결한다.
+ * 스크립트 통합 테스트 기반: pipeline 대역(API-SCR-30·31)을 {@code data2flow.core.pipeline-base-url}로, ai 내부 API 대역을
+ * {@code data2flow.core.analytics.ai-base-url}로 연결한다.
  * 스크립트 IT는 모두 이 클래스를 상속해 스프링 컨텍스트 하나를 함께 쓴다.
  */
 abstract class ScriptItSupport extends IntegrationTestSupport {
@@ -26,6 +27,8 @@ abstract class ScriptItSupport extends IntegrationTestSupport {
     @DynamicPropertySource
     static void pipeline(DynamicPropertyRegistry registry) {
         registry.add("data2flow.core.pipeline-base-url", PIPELINE::baseUrl);
+        // ai 내부 API(API-SCR-16 위임 /internal/ai/script-drafts)도 같은 대역이 받는다
+        registry.add("data2flow.core.analytics.ai-base-url", PIPELINE::baseUrl);
     }
 
     @BeforeEach
