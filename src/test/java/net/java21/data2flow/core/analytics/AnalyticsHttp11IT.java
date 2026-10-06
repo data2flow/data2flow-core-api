@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * ANA-04.01: core→analytics POST 본문이 실제 uvicorn(httptools, analytics 이미지와 같은 서버)에 도착한다.
  * 예전 core 내부 클라이언트(JDK HttpClient 기본 HTTP/2)는 평문 http에 {@code Upgrade: h2c}를 붙였고, uvicorn httptools는 그 요청의
- * 본문을 버려 analytics가 400을 돌려줬다. 이제 내부 호출은 HTTP/1.1로 고정한다(ADR-059).
+ * 본문을 버려 analytics가 400을 돌려줬다. 이제 내부 호출은 HTTP/1.1로 고정한다(ADR-060).
  */
 class AnalyticsHttp11IT {
 
