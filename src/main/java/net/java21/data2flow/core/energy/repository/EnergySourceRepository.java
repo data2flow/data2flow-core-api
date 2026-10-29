@@ -46,6 +46,28 @@ public class EnergySourceRepository {
     public record CandidateRow(long deviceId, String deviceName, long spaceId, String spaceName, List<String> metricKeys) {
     }
 
+    /** 일 집계용 원천: 켜진 원천과 그 사이트(공간 경로의 맨 위)·시간대(사이트, 없으면 조직), 공간 면적 */
+    public record MeterRow(long id, long spaceId, Long siteId, String timezone, Double areaM2, String kind, long deviceId, String metricKey,
+                           Boolean cumulative, boolean coversDescendants, Integer ratedPowerW, Integer standbyPowerW) {
+    }
+
+    public List<MeterRow> enabledMeters(long orgId) {
+        return jdbc.sql("""
+                        SELECT e.id, e.space_id, site.id AS site_id, coalesce(site.timezone, o.timezone, 'UTC') AS timezone, s.area_m2, e.kind,
+                               e.device_id, e.metric_key, e.cumulative, e.covers_descendants, e.rated_power_w, e.standby_power_w
+                          FROM data2flow_core.energy_sources e
+                          JOIN data2flow_core.spaces s ON s.id = e.space_id
+                          JOIN data2flow_core.organizations o ON o.id = e.organization_id
+                          LEFT JOIN data2flow_core.spaces site ON site.id = CAST(split_part(s.path, '/', 2) AS bigint)
+                         WHERE e.organization_id = :org AND e.enabled ORDER BY e.id""")
+                .param("org", orgId)
+                .query((rs, n) -> new MeterRow(rs.getLong("id"), rs.getLong("space_id"), Pg.longOrNull(rs, "site_id"), rs.getString("timezone"),
+                        rs.getBigDecimal("area_m2") == null ? null : rs.getBigDecimal("area_m2").doubleValue(), rs.getString("kind"),
+                        rs.getLong("device_id"), rs.getString("metric_key"), (Boolean) rs.getObject("cumulative"), rs.getBoolean("covers_descendants"),
+                        (Integer) rs.getObject("rated_power_w"), (Integer) rs.getObject("standby_power_w")))
+                .list();
+    }
+
     /** 조직의 원천. {@code spaceId}가 있으면 그 공간 것만 */
     public List<SourceRow> list(long orgId, Long spaceId) {
         return jdbc.sql(SOURCE + " WHERE e.organization_id = :org AND (CAST(:space AS bigint) IS NULL OR e.space_id = :space) ORDER BY s.path, e.id")

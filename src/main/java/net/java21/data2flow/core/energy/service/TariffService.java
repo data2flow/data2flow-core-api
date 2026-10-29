@@ -74,6 +74,13 @@ public class TariffService {
         return rows.stream().filter(t -> scope.includes(t.scopeSpaceId())).map(t -> view(t, rows)).toList();
     }
 
+    /** 조직 단가 전부(권한 확인 없음). 내부 설정 묶음(API-ENE-70)용 */
+    @Transactional(readOnly = true)
+    public List<TariffView> listOf(long orgId) {
+        List<TariffRow> rows = config.tariffs(orgId);
+        return rows.stream().map(t -> view(t, rows)).toList();
+    }
+
     @Transactional
     public TariffView create(TariffRequest request) {
         roleChecker.require(Permission.ENE_ADMIN);

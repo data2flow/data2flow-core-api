@@ -58,7 +58,12 @@ public class EmissionFactorService {
     @Transactional(readOnly = true)
     public List<EmissionFactorView> list() {
         roleChecker.require(Permission.ENE_READ);
-        long orgId = roleChecker.currentUser().organizationId();
+        return listOf(roleChecker.currentUser().organizationId());
+    }
+
+    /** 조직이 쓰는 배출계수 전부(시스템 기본값 포함, 권한 확인 없음). 내부 설정 묶음(API-ENE-70)도 쓴다 */
+    @Transactional(readOnly = true)
+    public List<EmissionFactorView> listOf(long orgId) {
         List<FactorRow> rows = config.factors(orgId);
         List<LocalDate> starts = rows.stream().map(FactorRow::validFrom).distinct().sorted().toList();
         return rows.stream().map(f -> view(f, starts)).toList();

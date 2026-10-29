@@ -212,4 +212,37 @@ class EnergySettingsIT extends IntegrationTestSupport {
         mvc.perform(as(org, admin, delete(path))).andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.header.resultCode").value("ENE_BILL_NOT_FOUND"));
     }
+
+    @Test
+    @DisplayName("[API-ENE-70] 내부 설정 묶음: 단가·배출계수(시스템 포함)·켜진 원천(사이트·시간대), 설정을 바꿀 때마다 configVersion이 오른다")
+    void internalConfig() throws Exception {
+        String bundle = "/internal/core/energy/config?orgId=" + org;
+        mvc.perform(get(bundle).header("X-CALLER-SERVICE", "data2flow-analytics")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.response.configVersion").value(0)).andExpect(jsonPath("$.response.meterSources", hasSize(0)));
+        mvc.perform(as(org, admin, json(post("/core/energy/tariffs"),
+                        "{\"scopeSpaceId\":\"%d\",\"mode\":\"FLAT\",\"validFrom\":\"2026-09-01\",\"flatRateKrwPerKwh\":150}".formatted(site))))
+                .andExpect(status().isCreated());
+        mvc.perform(as(org, admin, json(post("/core/energy/sources"),
+                        "{\"spaceId\":\"%d\",\"kind\":\"METERED\",\"deviceId\":\"%d\",\"metricKey\":\"energy\"}".formatted(room, plug))))
+                .andExpect(status().isCreated());
+        mvc.perform(as(org, admin, json(post("/core/energy/sources"),
+                        "{\"spaceId\":\"%d\",\"kind\":\"ESTIMATED\",\"deviceId\":\"%d\",\"ratedPowerW\":1200,\"standbyPowerW\":5,\"enabled\":false}"
+                                .formatted(room, aircon))))
+                .andExpect(status().isCreated());
+        mvc.perform(get(bundle).header("X-CALLER-SERVICE", "data2flow-analytics")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.response.organizationId").value(Long.toString(org)))
+                .andExpect(jsonPath("$.response.configVersion").value(3))
+                .andExpect(jsonPath("$.response.tariffs", hasSize(1)))
+                .andExpect(jsonPath("$.response.tariffs[0].scopeSpace.id").value(Long.toString(site)))
+                .andExpect(jsonPath("$.response.emissionFactors[0].system").value(true))
+                .andExpect(jsonPath("$.response.meterSources", hasSize(1)))
+                .andExpect(jsonPath("$.response.meterSources[0].spaceId").value(Long.toString(room)))
+                .andExpect(jsonPath("$.response.meterSources[0].siteId").value(Long.toString(site)))
+                .andExpect(jsonPath("$.response.meterSources[0].cumulative").value(true))
+                .andExpect(jsonPath("$.response.meterSources[0].timezone").isString())
+                .andExpect(jsonPath("$.response.holidays." + site).isArray());
+        MvcResult orgs = mvc.perform(get("/internal/core/energy/organizations").header("X-CALLER-SERVICE", "data2flow-analytics"))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(orgs.getResponse().getContentAsString()).contains("\"" + org + "\"");
+    }
 }
