@@ -20,31 +20,35 @@ import java.time.Instant;
  *   <li>{@link #score()} 5분: 종합 점수 저장·EVT-CMP-02(CMP-01.05)</li>
  *   <li>{@link #track()} 5분: 어제·오늘 일 집계, 이탈 구간(EVT-CMP-04), 연속 달성(EVT-CMP-05)(CMP-02.01)</li>
  *   <li>{@link #outcomes()} 10분: 조치 후 24시간이 지난 개선 조치의 결과 자동 확인(CMP-02.05, BR-CMP-18)</li>
+ *   <li>{@link #schedules()} 1분: 리포트 정기 발행 회차 실행(CMP-02.04)</li>
  * </ul>
  */
 @Component
 public class ComplianceJobs {
 
     private static final Logger log = LoggerFactory.getLogger(ComplianceJobs.class);
-    /** advisory lock 키: "d2fcmps"(점수), "d2fcmpt"(추적), "d2fcmpa"(조치 결과) */
+    /** advisory lock 키: "d2fcmps"(점수), "d2fcmpt"(추적), "d2fcmpa"(조치 결과), "d2fcmpr"(정기 발행) */
     static final long SCORE_LOCK = 0x6432_6663_6d70_73L;
     static final long TRACK_LOCK = 0x6432_6663_6d70_74L;
     static final long OUTCOME_LOCK = 0x6432_6663_6d70_61L;
+    static final long SCHEDULE_LOCK = 0x6432_6663_6d70_72L;
 
     private final InternalOrganizations organizations;
     private final ComplianceScoreService scores;
     private final ComplianceTracker tracker;
     private final CorrectiveActionService actions;
+    private final ReportScheduleRunner reportSchedules;
     private final JdbcClient jdbc;
     private final TransactionTemplate tx;
     private final Clock clock;
 
     public ComplianceJobs(InternalOrganizations organizations, ComplianceScoreService scores, ComplianceTracker tracker,
-                          CorrectiveActionService actions, JdbcClient jdbc, PlatformTransactionManager txManager, Clock clock) {
+                          CorrectiveActionService actions, ReportScheduleRunner reportSchedules, JdbcClient jdbc, PlatformTransactionManager txManager, Clock clock) {
         this.organizations = organizations;
         this.scores = scores;
         this.tracker = tracker;
         this.actions = actions;
+        this.reportSchedules = reportSchedules;
         this.jdbc = jdbc;
         this.tx = new TransactionTemplate(txManager);
         this.clock = clock;
@@ -66,6 +70,12 @@ public class ComplianceJobs {
     public boolean outcomes() {
         Instant now = clock.instant();
         return each(OUTCOME_LOCK, org -> actions.evaluateDue(org, now), "조치 결과 확인");
+    }
+
+    /** 정기 발행 작업 한 번. 다른 파드가 돌고 있으면 false */
+    public boolean schedules() {
+        Instant now = clock.instant();
+        return each(SCHEDULE_LOCK, org -> reportSchedules.run(org, now), "정기 발행");
     }
 
     private boolean each(long key, java.util.function.LongConsumer work, String name) {
@@ -118,6 +128,11 @@ public class ComplianceJobs {
         @Scheduled(cron = "15 */10 * * * *")
         void outcomes() {
             jobs.outcomes();
+        }
+
+        @Scheduled(cron = "20 * * * * *")
+        void schedules() {
+            jobs.schedules();
         }
     }
 }
