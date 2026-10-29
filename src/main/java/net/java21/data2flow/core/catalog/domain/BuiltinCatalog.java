@@ -44,7 +44,7 @@ public final class BuiltinCatalog {
             new MetricDef("tvoc", "TVOC", null, "NUMBER", 0.0, 60000.0, 0, "AVG", false, "tvoc"),
             new MetricDef("illumination", "조도", "lux", "NUMBER", 0.0, 100000.0, 0, "AVG", false, "illuminance"),
             new MetricDef("infrared", "적외선", null, "NUMBER", 0.0, null, 0, "AVG", false, null),
-            new MetricDef("activity", "활동량(PIR)", null, "NUMBER", 0.0, null, 0, "SUM", false, "occupancy"),
+            new MetricDef("activity", "활동량(PIR)", null, "NUMBER", 0.0, null, 0, "SUM", false, "activity"),
             new MetricDef("LAeq", "등가 소음(LAeq)", "dB", "NUMBER", 0.0, 140.0, 1, "AVG", false, "noise"),
             new MetricDef("LAI", "순간 소음(LAI)", "dB", "NUMBER", 0.0, 140.0, 1, "AVG", false, "noise"),
             new MetricDef("LAImax", "최대 소음(LAImax)", "dB", "NUMBER", 0.0, 140.0, 1, "MAX", false, "noise"));
