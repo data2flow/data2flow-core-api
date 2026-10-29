@@ -4,8 +4,8 @@ import net.java21.data2flow.contracts.error.ErrorCode;
 
 /**
  * 환경 기준·인증 보고 오류 코드(spec/detail/CMP/domain-model.md §5). 문구는 {@code i18n/compliance*.properties}의 {@code error.<코드>}.
- * {@code CMP_PROFILE_ARCHIVED}는 문서에 없던 코드다(보관된 프로필은 새 적용 불가, domain-model §2). {@code CMP_EXCURSION_NOT_FOUND}·{@code CMP_ACTION_NOT_FOUND}도
- * 문서에 없던 코드다(API-CMP-23의 이탈 구간·조치 404). 공간·측정 항목 코드는 다른 기능 묶음과 같은 이름이다.
+ * {@code CMP_PROFILE_ARCHIVED}는 문서에 없던 코드다(보관된 프로필은 새 적용 불가, domain-model §2). {@code CMP_EXCURSION_NOT_FOUND}·{@code CMP_ACTION_NOT_FOUND}·{@code CMP_SCHEDULE_NOT_FOUND}도
+ * 문서에 없던 코드다(API-CMP-21·23의 일정·이탈 구간·조치 404). 공간·측정 항목 코드는 다른 기능 묶음과 같은 이름이다.
  */
 public enum ComplianceErrorCode implements ErrorCode {
     CMP_PROFILE_NOT_FOUND(404),
@@ -25,6 +25,8 @@ public enum ComplianceErrorCode implements ErrorCode {
     CMP_ACTION_INVALID(400),
     CMP_EXCURSION_NOT_FOUND(404),
     CMP_ACTION_NOT_FOUND(404),
+    CMP_SCHEDULE_INVALID(400),
+    CMP_SCHEDULE_NOT_FOUND(404),
     SPACE_NOT_FOUND(404),
     METRIC_NOT_FOUND(404);
 

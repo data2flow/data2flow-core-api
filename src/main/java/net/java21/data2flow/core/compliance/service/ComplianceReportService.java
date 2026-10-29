@@ -1,5 +1,7 @@
 package net.java21.data2flow.core.compliance.service;
 
+import net.java21.data2flow.contracts.audit.AuditActorType;
+import net.java21.data2flow.contracts.audit.AuditEvent;
 import net.java21.data2flow.contracts.authz.Permission;
 import net.java21.data2flow.contracts.authz.RoleChecker;
 import net.java21.data2flow.contracts.authz.SpaceScope;
@@ -117,7 +119,34 @@ public class ComplianceReportService {
     public ReportCreated create(CreateReportRequest request) {
         roleChecker.require(Permission.CMP_REPORT);
         CurrentUser user = roleChecker.currentUser();
-        long orgId = user.organizationId();
+        return create(Actor.of(user), request);
+    }
+
+    /**
+     * 행위자: 화면 요청이면 그 사용자(공간 범위를 검사한다), 정기 발행이면 일정을 만든 사용자 대신 서비스가 한다(범위는 일정 저장 때 검사했다).
+     * 감사 행위자는 사용자 또는 SERVICE {@value #SCHEDULE_ACTOR}다
+     */
+    public record Actor(long orgId, long userId, CurrentUser user) {
+
+        static Actor of(CurrentUser user) {
+            return new Actor(user.organizationId(), user.userId(), user);
+        }
+
+        public static Actor schedule(long orgId, long ownerUserId) {
+            return new Actor(orgId, ownerUserId, null);
+        }
+
+        AuditEvent.Builder apply(AuditEvent.Builder b) {
+            return user != null ? b.actor(user) : b.actor(AuditActorType.SERVICE, SCHEDULE_ACTOR, null).detail("onBehalfOf", Long.toString(userId));
+        }
+    }
+
+    public static final String SCHEDULE_ACTOR = "compliance-report-schedule";
+
+    /** API-CMP-16 본체(정기 발행도 쓴다) */
+    @Transactional
+    public ReportCreated create(Actor actor, CreateReportRequest request) {
+        long orgId = actor.orgId();
         if (request == null) {
             throw ProfileBodyReader.invalid("type", "NotNull");
         }
@@ -145,7 +174,9 @@ public class ComplianceReportService {
                 throw ProfileBodyReader.invalid("spaceIds", "NotNull");
             }
             applications.space(orgId, id).orElseThrow(() -> new BusinessException(ComplianceErrorCode.SPACE_NOT_FOUND));
-            roleChecker.require(Permission.CMP_REPORT, id, ComplianceErrorCode.SPACE_NOT_FOUND);
+            if (actor.user() != null) {
+                roleChecker.require(Permission.CMP_REPORT, id, ComplianceErrorCode.SPACE_NOT_FOUND);
+            }
             spaceIds.add(id);
         }
         if (request.periodFrom() == null || request.periodFrom().isBlank()) {
@@ -181,7 +212,7 @@ public class ComplianceReportService {
         ReportRow report = reports.findByDedup(orgId, key).orElse(null);
         if (report == null) {
             long id = reports.insertReport(orgId, type, title, spaceIds, target.facilityType(), period[0], period[1], optionsJson, key,
-                    user.userId(), now);
+                    actor.userId(), now);
             report = id < 0 ? reports.findByDedup(orgId, key).orElseThrow() : reports.find(orgId, id).orElseThrow();
         } else {
             reports.touchReport(orgId, report.id(), title, optionsJson, now);
@@ -192,11 +223,11 @@ public class ComplianceReportService {
         if (generating != null) {
             return new ReportCreated(Long.toString(reportId), Long.toString(generating.id()), generating.revisionNo(), generating.status());
         }
-        RevisionRow revision = reports.insertRevision(orgId, reportId, user.userId(), now);
+        RevisionRow revision = reports.insertRevision(orgId, reportId, actor.userId(), now);
         for (ApplicationRow a : target.applications()) {
             profiles.lockVersion(a.profileId(), a.effectiveVersionNo());
         }
-        audits.record(audits.event(orgId, ComplianceAuditCodes.CMP_REPORT_REQUESTED).actor(user).target("COMPLIANCE_REPORT", Long.toString(reportId))
+        audits.record(actor.apply(audits.event(orgId, ComplianceAuditCodes.CMP_REPORT_REQUESTED)).target("COMPLIANCE_REPORT", Long.toString(reportId))
                 .detail("revisionNo", revision.revisionNo()).detail("type", type).detail("periodFrom", period[0].toString())
                 .detail("periodTo", period[1].toString()).detail("spaceIds", spaceIds.stream().map(String::valueOf).toList())
                 .detail("facilityType", target.facilityType()));
@@ -251,9 +282,15 @@ public class ComplianceReportService {
     @Transactional
     public RevisionView publish(long reportId, int revisionNo) {
         roleChecker.require(Permission.CMP_REPORT);
-        CurrentUser user = roleChecker.currentUser();
-        long orgId = user.organizationId();
-        ReportRow report = report(orgId, reportId);
+        return publish(Actor.of(roleChecker.currentUser()), reportId, revisionNo, null);
+    }
+
+    /** API-CMP-18 본체. recipients는 정기 발행 수신자(EVT-CMP-03, 화면 발행이면 null) */
+    @Transactional
+    public RevisionView publish(Actor actor, long reportId, int revisionNo, ComplianceReportPublished.Recipients recipients) {
+        long orgId = actor.orgId();
+        ReportRow report = actor.user() != null ? report(orgId, reportId)
+                : reports.find(orgId, reportId).orElseThrow(() -> new BusinessException(ComplianceErrorCode.CMP_REPORT_NOT_FOUND));
         RevisionRow revision = revision(orgId, reportId, revisionNo);
         if (!"DRAFT".equals(revision.status())) {
             throw new BusinessException(ComplianceErrorCode.CMP_REPORT_STATE_CONFLICT);
@@ -261,23 +298,23 @@ public class ComplianceReportService {
         Model model = json.readValue(reports.model(orgId, revision.id())
                 .orElseThrow(() -> new BusinessException(ComplianceErrorCode.CMP_REPORT_STATE_CONFLICT)), Model.class);
         Instant now = clock.instant();
-        String publisher = reports.userName(orgId, user.userId()).orElse(null);
+        String publisher = reports.userName(orgId, actor.userId()).orElse(null);
         byte[] pdf = ReportPdfRenderer.render(model, new Meta(reportId, revisionNo, revision.updatedAt(), revision.generatedByName(), now, publisher,
                 false));
         Sealed sealed = ReportHash.seal(pdf);
         Stored stored = files.storeGenerated(orgId, ComplianceReportGenerator.PURPOSE, ComplianceReportGenerator.fileName(reportId, revisionNo),
-                "application/pdf", sealed.pdf(), user.userId());
-        if (!reports.publish(orgId, revision.id(), stored.key(), sealed.sha256(), stored.sizeBytes(), user.userId(), now)) {
+                "application/pdf", sealed.pdf(), actor.userId());
+        if (!reports.publish(orgId, revision.id(), stored.key(), sealed.sha256(), stored.sizeBytes(), actor.userId(), now)) {
             throw new BusinessException(ComplianceErrorCode.CMP_REPORT_STATE_CONFLICT);
         }
         if (revision.pdfObjectKey() != null) {
             files.delete(orgId, List.of(revision.pdfObjectKey()));
         }
         reports.touchReportUpdated(orgId, reportId, now);
-        audits.record(audits.event(orgId, ComplianceAuditCodes.CMP_REPORT_PUBLISHED).actor(user).target("COMPLIANCE_REPORT", Long.toString(reportId))
+        audits.record(actor.apply(audits.event(orgId, ComplianceAuditCodes.CMP_REPORT_PUBLISHED)).target("COMPLIANCE_REPORT", Long.toString(reportId))
                 .detail("revisionNo", revisionNo).detail("sha256", sealed.sha256()));
         events.event(EventType.COMPLIANCE_REPORT_PUBLISHED, orgId, new ComplianceReportPublished(reportId, revisionNo,
-                ComplianceReportPublished.Type.valueOf(report.type()), report.title(), report.periodFrom(), report.periodTo(), sealed.sha256(), null));
+                ComplianceReportPublished.Type.valueOf(report.type()), report.title(), report.periodFrom(), report.periodTo(), sealed.sha256(), recipients));
         return revisionView(revision(orgId, reportId, revisionNo));
     }
 
