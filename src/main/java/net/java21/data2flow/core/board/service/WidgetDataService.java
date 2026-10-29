@@ -31,6 +31,7 @@ import net.java21.data2flow.core.board.repository.WidgetDataRepository.Point;
 import net.java21.data2flow.core.board.repository.WidgetDataRepository.SpaceRef;
 import net.java21.data2flow.core.board.repository.WidgetDataRepository.StateRow;
 import net.java21.data2flow.core.board.repository.WidgetDataRepository.Summary;
+import net.java21.data2flow.core.energy.service.EnergyMetricsService;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
@@ -41,7 +42,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -69,12 +72,14 @@ public class WidgetDataService {
 
     private final WidgetDataRepository data;
     private final AnalysisWidgetData analysis;
+    private final EnergyMetricsService energy;
     private final JsonMapper json;
     private final Clock clock;
 
-    public WidgetDataService(WidgetDataRepository data, AnalysisWidgetData analysis, JsonMapper json, Clock clock) {
+    public WidgetDataService(WidgetDataRepository data, AnalysisWidgetData analysis, EnergyMetricsService energy, JsonMapper json, Clock clock) {
         this.data = data;
         this.analysis = analysis;
+        this.energy = energy;
         this.json = json;
         this.clock = clock;
     }
@@ -113,11 +118,52 @@ public class WidgetDataService {
             case "status-list" -> statusList(ctx, targets);
             case "alarm-list" -> alarmList(ctx, targets, options);
             case "floorplan" -> floorplan(ctx, targets.getFirst(), options);
+            case "energy-kpi", "energy-trend" -> energy(ctx, type.type(), targets, range, options);
             case "analysis" -> analysis.data(ctx.organizationId(), ctx.scope(), options,
                     () -> new BusinessException(BoardErrorCode.WIDGET_DATA_FORBIDDEN));
             default -> null; // markdown: 데이터 없음(내용은 위젯 옵션)
         };
         return new WidgetData(type.type(), result);
+    }
+
+    // ------------------------------------------------------------------ 에너지(ENE-01.05)
+
+    /**
+     * energy-kpi: 합계(사용량·비용·탄소·EUI·추정 비율)와 비교, 하위 공간 상위 N개(드릴다운). energy-trend: 기간별 계열(기준선 예상 포함).
+     * 기간은 조직 시간대 날짜로 자르고(끝은 포함), 62일이 넘으면 월 단위다
+     */
+    private Map<String, Object> energy(Context ctx, String type, List<Target> targets, Range range, JsonNode options) {
+        Long spaceId = targets.isEmpty() ? null : targets.getFirst().spaceId();
+        ZoneId zone = ZoneId.of(ctx.timezone());
+        LocalDate from = range.from().atZone(zone).toLocalDate();
+        LocalDate to = range.to().minusNanos(1).atZone(zone).toLocalDate();
+        boolean kpi = "energy-kpi".equals(type);
+        String granularity = options.path("granularity").isString() ? options.path("granularity").asString()
+                : ChronoUnit.DAYS.between(from, to) >= 62 ? "MONTH" : "DAY";
+        String compare = kpi ? options.path("compare").asString("PREVIOUS_PERIOD")
+                : options.path("baseline").asBoolean(false) ? "BASELINE" : null;
+        JsonNode r = energy.widget(ctx.organizationId(), ctx.scope(), spaceId, from.toString(), to.toString(), granularity, compare,
+                () -> new BusinessException(BoardErrorCode.WIDGET_DATA_FORBIDDEN));
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("scope", r == null ? null : r.get("scope"));
+        out.put("from", from.toString());
+        out.put("to", to.toString());
+        if (kpi) {
+            out.put("totals", r == null ? null : r.get("totals"));
+            out.put("compare", r == null ? null : r.get("compare"));
+            int n = options.path("drilldown").isIntegralNumber() ? options.get("drilldown").intValue() : 5;
+            List<JsonNode> children = new ArrayList<>();
+            if (r != null && r.path("children").isArray()) {
+                r.path("children").values().forEach(children::add);
+            }
+            children.sort(Comparator.comparingDouble((JsonNode c) -> c.path("kwh").asDouble(0)).reversed());
+            out.put("children", children.subList(0, Math.min(n, children.size())));
+        } else {
+            out.put("granularity", granularity);
+            out.put("measure", options.path("measure").asString("kwh"));
+            out.put("series", r == null ? List.of() : r.path("series"));
+        }
+        return out;
     }
 
     // ------------------------------------------------------------------ 시계열
