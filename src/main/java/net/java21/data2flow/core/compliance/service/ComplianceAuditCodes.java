@@ -1,6 +1,6 @@
 package net.java21.data2flow.core.compliance.service;
 
-/** 환경 기준 프로필·적용·점수 가중치 감사 action 코드(CMP-01). 공통 AuditCodes와 같은 UPPER_SNAKE 형식 */
+/** 환경 기준 프로필·적용·점수 가중치·리포트 감사 action 코드(CMP-01). 공통 AuditCodes와 같은 UPPER_SNAKE 형식 */
 public final class ComplianceAuditCodes {
 
     public static final String CMP_PROFILE_CREATED = "CMP_PROFILE_CREATED";
@@ -12,6 +12,10 @@ public final class ComplianceAuditCodes {
     public static final String CMP_PROFILE_APPLIED = "CMP_PROFILE_APPLIED";
     public static final String CMP_PROFILE_UNAPPLIED = "CMP_PROFILE_UNAPPLIED";
     public static final String CMP_SCORE_WEIGHTS_CHANGED = "CMP_SCORE_WEIGHTS_CHANGED";
+    public static final String CMP_REPORT_REQUESTED = "CMP_REPORT_REQUESTED";
+    public static final String CMP_REPORT_PUBLISHED = "CMP_REPORT_PUBLISHED";
+    public static final String CMP_REPORT_DOWNLOADED = "CMP_REPORT_DOWNLOADED";
+    public static final String CMP_REPORT_DELETED = "CMP_REPORT_DELETED";
 
     private ComplianceAuditCodes() {
     }

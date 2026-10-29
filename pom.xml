@@ -34,6 +34,8 @@
         <bouncycastle.version>1.86</bouncycastle.version>
         <!-- 테스트 SMTP 서버(초대·재설정 메일 검증). Apache-2.0 -->
         <zxing.version>3.5.3</zxing.version>
+        <openpdf.version>3.0.5</openpdf.version>
+        <pdfbox.version>3.0.6</pdfbox.version>
         <greenmail.version>2.1.14</greenmail.version>
         <!-- 정기 내보내기 SFTP 전달(TSD-07.02). Apache MINA SSHD, Apache-2.0 -->
         <sshd.version>2.20.0</sshd.version>
@@ -150,6 +152,19 @@
             <artifactId>commons-codec</artifactId>
         </dependency>
         <!-- 기기 QR 라벨(DEV-09.04): QR 행렬만 만들고 PDF는 직접 그린다. Apache-2.0(ADR-018 허용) -->
+        <!-- 준수 리포트 PDF(CMP-02.02·02.06). OpenPDF는 LGPL/MPL, 수정 없이 라이브러리로만 쓴다(ADR-018, CMP-api.md).
+             brotli 압축은 쓰지 않아 brotli4j는 뺀다 -->
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf</artifactId>
+            <version>${openpdf.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.aayushatharva.brotli4j</groupId>
+                    <artifactId>brotli4j</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <dependency>
             <groupId>com.google.zxing</groupId>
             <artifactId>core</artifactId>
@@ -185,6 +200,13 @@
         <dependency>
             <groupId>net.java21.data2flow</groupId>
             <artifactId>data2flow-contracts-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- 리포트 PDF 글자 추출 시험(TC-CMP-046). Apache-2.0 -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
