@@ -65,6 +65,15 @@ class BuiltinModelCatalogTest {
     }
 
     @Test
+    @DisplayName("[ANA-01.05] 의미 태그가 analytics 도메인 템플릿 역할과 같다(재실 추정 activity·noise·illuminance, 쾌적도 co2 등)")
+    void semanticsMatchAnalyticsRoles() {
+        Map<String, String> semantics = new LinkedHashMap<>();
+        BuiltinCatalog.METRICS.forEach(m -> semantics.put(m.key(), m.semantic()));
+        assertThat(semantics).containsEntry("activity", "activity").containsEntry("LAeq", "noise").containsEntry("illumination", "illuminance")
+                .containsEntry("co2", "co2").containsEntry("temperature", "temperature").containsEntry("humidity", "humidity");
+    }
+
+    @Test
     @DisplayName("[DEV-03.02][ING-02.02] pipeline 공유 픽스처(academy-*)의 측정 키·단위가 기본 모델 정의와 같다(키가 다르면 UNVERIFIED가 생긴다) — TC-DEV-100")
     void matchesPipelineFixtures() {
         List<String> codes = List.copyOf(EXPECTED.keySet());
