@@ -1,7 +1,9 @@
 package net.java21.data2flow.core.energy.repository;
 
+import net.java21.data2flow.contracts.authz.SpaceScope;
 import net.java21.data2flow.contracts.tenancy.OrganizationScopeExempt;
 import net.java21.data2flow.core.common.Pg;
+import net.java21.data2flow.core.space.repository.SpaceScopeSql;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -92,6 +94,28 @@ public class EnergyConfigRepository {
         return jdbc.sql("SELECT id, name, path, type FROM data2flow_core.spaces WHERE organization_id = :org AND id = :id AND status = 'ACTIVE'")
                 .param("org", orgId).param("id", id).query((rs, n) -> new SpaceRow(rs.getLong("id"), rs.getString("name"), rs.getString("path"),
                         rs.getString("type"))).optional();
+    }
+
+    /** 롤업용 공간 노드: 면적과 켜진 상위 계량기(하위 합계 포함 측정 원천) 여부 */
+    public record TreeRow(long id, Long parentId, String name, String type, Double areaM2, boolean coversDescendants) {
+    }
+
+    /** ACTIVE 공간 트리. {@code pathPrefix}가 있으면 그 공간과 하위만, 공간 범위가 제한된 사용자면 허용 공간만(ENE-01.03, TC-ENE-019) */
+    public List<TreeRow> spaceTree(long orgId, String pathPrefix, SpaceScope scope) {
+        Map<String, Object> params = new HashMap<>();
+        params.put("org", orgId);
+        params.put("prefix", pathPrefix);
+        String sql = """
+                SELECT s.id, s.parent_id, s.name, s.type, s.area_m2,
+                       EXISTS (SELECT 1 FROM data2flow_core.energy_sources e WHERE e.space_id = s.id AND e.kind = 'METERED'
+                                  AND e.covers_descendants AND e.enabled) AS covers
+                  FROM data2flow_core.spaces s
+                 WHERE s.organization_id = :org AND s.status = 'ACTIVE' AND (CAST(:prefix AS text) IS NULL OR s.path LIKE :prefix || '%')"""
+                + SpaceScopeSql.and(scope, "s.id", params) + " ORDER BY s.path, s.sort_order, s.id";
+        return jdbc.sql(sql).params(params)
+                .query((rs, n) -> new TreeRow(rs.getLong("id"), Pg.longOrNull(rs, "parent_id"), rs.getString("name"), rs.getString("type"),
+                        rs.getBigDecimal("area_m2") == null ? null : rs.getBigDecimal("area_m2").doubleValue(), rs.getBoolean("covers")))
+                .list();
     }
 
     public List<TariffRow> tariffs(long orgId) {
