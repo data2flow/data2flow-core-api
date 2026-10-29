@@ -94,12 +94,24 @@ public class EnergyMetricsService {
     }
 
     private JsonNode call(String scopeSpaceId, String from, String to, String granularity, String compare) {
+        Prepared p = prepare(scopeSpaceId, from, to, granularity, compare);
+        JsonNode r = analytics.call(HttpMethod.POST, PATH, null, p.body(), EnergyErrorCode.SPACE_NOT_FOUND);
+        return finish(r, p);
+    }
+
+    /**
+     * API-ENE-85 요청 본문(권한 범위로 자른 공간 트리, 기준선 비교면 활성 버전 모델 키). 월간 리포트(API-ENE-13)는 요청할 때 만든 본문을 저장해 두고
+     * 생성 작업이 그대로 다시 보낸다(작업에는 요청자 권한 문맥이 없다)
+     */
+    public Prepared prepare(String scopeSpaceId, String from, String to, String granularity, String compare) {
         long orgId = roleChecker.currentUser().organizationId();
         Long scope = EnergyAccess.id(scopeSpaceId, EnergyErrorCode.SPACE_NOT_FOUND);
         String prefix = null;
+        String scopeName = null;
         if (scope != null) {
             SpaceRow space = access.space(Permission.ENE_READ, orgId, scope);
             prefix = space.path();
+            scopeName = space.name();
         } else {
             roleChecker.require(Permission.ENE_READ);
         }
@@ -126,13 +138,21 @@ public class EnergyMetricsService {
         if (active != null) {
             body.put("baselineKey", active.activeModelKey());
         }
-        JsonNode r = analytics.call(HttpMethod.POST, PATH, null, body, EnergyErrorCode.SPACE_NOT_FOUND);
+        return new Prepared(body, active == null ? null : active.activeVersionId(), scopeName);
+    }
+
+    /** 응답 정리: 문자열 ID, 기준선 비교면 모델 키 대신 버전 ID */
+    public static JsonNode finish(JsonNode r, Prepared p) {
         stringIds(r);
-        if (active != null && r != null && r.get("compare") instanceof ObjectNode c) {
+        if (p.baselineVersionId() != null && r != null && r.get("compare") instanceof ObjectNode c) {
             c.remove("baselineKey");
-            c.put("baselineVersionId", Long.toString(active.activeVersionId()));
+            c.put("baselineVersionId", Long.toString(p.baselineVersionId()));
         }
         return r;
+    }
+
+    /** API-ENE-85 요청 본문과 기준선 버전·범위 이름 */
+    public record Prepared(Map<String, Object> body, Long baselineVersionId, String scopeName) {
     }
 
     /** analytics 숫자 ID → API 문자열 ID(api-rules §2) */
