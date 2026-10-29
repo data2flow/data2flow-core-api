@@ -46,7 +46,8 @@
         <repository>
             <id>github</id>
             <url>https://maven.pkg.github.com/data2flow/data2flow-contracts</url>
-            <snapshots><enabled>true</enabled></snapshots>
+            <!-- CI의 Maven 캐시에 남은 옛 스냅숏을 쓰지 않도록 빌드마다 contracts 스냅숏을 확인한다 -->
+            <snapshots><enabled>true</enabled><updatePolicy>always</updatePolicy></snapshots>
         </repository>
     </repositories>
 
