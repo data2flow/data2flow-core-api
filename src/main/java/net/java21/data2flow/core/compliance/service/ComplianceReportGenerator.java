@@ -2,9 +2,12 @@ package net.java21.data2flow.core.compliance.service;
 
 import net.java21.data2flow.contracts.error.BusinessException;
 import net.java21.data2flow.core.compliance.domain.ComplianceErrorCode;
+import net.java21.data2flow.core.compliance.domain.CorrectiveActions;
+import net.java21.data2flow.core.compliance.domain.CorrectiveActions.Summary;
 import net.java21.data2flow.core.compliance.domain.KrSelfCheckReportBuilder;
 import net.java21.data2flow.core.compliance.domain.KrSelfCheckReportBuilder.Aggregate;
 import net.java21.data2flow.core.compliance.domain.KrSelfCheckReportBuilder.Device;
+import net.java21.data2flow.core.compliance.domain.KrSelfCheckReportBuilder.Excursion;
 import net.java21.data2flow.core.compliance.domain.KrSelfCheckReportBuilder.Request;
 import net.java21.data2flow.core.compliance.domain.KrSelfCheckReportBuilder.Rows;
 import net.java21.data2flow.core.compliance.domain.KrSelfCheckReportBuilder.Version;
@@ -33,6 +36,8 @@ import net.java21.data2flow.core.compliance.repository.ComplianceReportRepositor
 import net.java21.data2flow.core.compliance.repository.ComplianceReportRepository.RevisionRow;
 import net.java21.data2flow.core.compliance.repository.ComplianceReportRepository.VersionInfo;
 import net.java21.data2flow.core.compliance.repository.ComplianceStatusRepository;
+import net.java21.data2flow.core.compliance.repository.CorrectiveActionRepository;
+import net.java21.data2flow.core.compliance.repository.CorrectiveActionRepository.ActionRow;
 import net.java21.data2flow.core.filestore.service.StoredFiles;
 import net.java21.data2flow.core.filestore.service.StoredFiles.Stored;
 import org.slf4j.Logger;
@@ -86,6 +91,7 @@ public class ComplianceReportGenerator {
     private final ComplianceApplicationService applicationService;
     private final ComplianceProfileRepository profiles;
     private final ComplianceStatusRepository status;
+    private final CorrectiveActionRepository actions;
     private final StoredFiles files;
     private final JsonMapper json;
     private final TransactionTemplate tx;
@@ -93,13 +99,14 @@ public class ComplianceReportGenerator {
 
     public ComplianceReportGenerator(ComplianceReportRepository reports, ComplianceApplicationRepository applications,
                                      ComplianceApplicationService applicationService, ComplianceProfileRepository profiles,
-                                     ComplianceStatusRepository status, StoredFiles files, JsonMapper json, PlatformTransactionManager txManager,
-                                     Clock clock) {
+                                     ComplianceStatusRepository status, CorrectiveActionRepository actions, StoredFiles files, JsonMapper json,
+                                     PlatformTransactionManager txManager, Clock clock) {
         this.reports = reports;
         this.applications = applications;
         this.applicationService = applicationService;
         this.profiles = profiles;
         this.status = status;
+        this.actions = actions;
         this.files = files;
         this.json = json;
         this.tx = new TransactionTemplate(txManager);
@@ -228,7 +235,7 @@ public class ComplianceReportGenerator {
         }
         Instant from = report.periodFrom().atStartOfDay(zone).toInstant();
         Instant to = report.periodTo().plusDays(1).atStartOfDay(zone).toInstant();
-        var excursions = reports.excursions(org, spaceIds, versionIds, from, to);
+        List<Excursion> excursions = withActions(org, reports.excursions(org, spaceIds, versionIds, from, to), includeActions(report), zone);
 
         int interval = calibrationDays(current);
         List<DeviceRow> deviceRows = applications.activeRealDevices(org, spaceIds);
@@ -249,6 +256,27 @@ public class ComplianceReportGenerator {
         return KrSelfCheckReportBuilder.build(new Request(report.title(), facility, report.periodFrom(), report.periodTo(), zone), spaces, versions,
                 aggregates, excursions, devices, unmeasurable(org, target), new Rows(rows, virtual, previous), LocalDate.now(clock.withZone(zone)),
                 applications.metricUnits(org));
+    }
+
+    /** 이탈 구간마다 개선 조치 문구를 붙인다(CMP-02.05, AT-CMP-10.1). 옵션 includeActions=false면 붙이지 않는다 */
+    private List<Excursion> withActions(long org, List<Excursion> excursions, boolean include, ZoneId zone) {
+        if (!include || excursions.isEmpty()) {
+            return excursions;
+        }
+        Map<Long, List<Summary>> byExcursion = new HashMap<>();
+        for (ActionRow a : actions.byExcursions(org, excursions.stream().map(Excursion::id).toList())) {
+            byExcursion.computeIfAbsent(a.excursion().id(), k -> new ArrayList<>()).add(new Summary(a.cause(), a.causeNote(), a.actionText(),
+                    a.actorName(), a.actedAt(), a.resultMode(), a.resultRatio24h(), a.resultNote(), a.resultCheckedAt()));
+        }
+        return excursions.stream().map(x -> x.withAction(CorrectiveActions.text(byExcursion.get(x.id()), zone))).toList();
+    }
+
+    private boolean includeActions(ReportRow report) {
+        if (report.optionsJson() == null) {
+            return true;
+        }
+        JsonNode n = json.readTree(report.optionsJson()).get("includeActions");
+        return n == null || !n.isBoolean() || n.booleanValue();
     }
 
     /** 시설 유형에 맞는 규칙만, 항목마다 하나(유형 전용 규칙 우선) */

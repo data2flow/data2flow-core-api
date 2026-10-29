@@ -49,9 +49,9 @@ class KrSelfCheckReportBuilderTest {
     @DisplayName("[TC-CMP-045] 항목 통계: 평균·최대·충족률·결측률·이탈 시간, 기간 안에 시작한 이탈 구간만 센다, 결과는 공간 경로 순")
     void metrics() {
         List<Excursion> excursions = List.of(
-                new Excursion(3, 70, "co2", Instant.parse("2026-10-02T02:00:00Z"), Instant.parse("2026-10-02T04:00:00Z"), BigDecimal.valueOf(1200)),
+                new Excursion(1, 3, 70, "co2", Instant.parse("2026-10-02T02:00:00Z"), Instant.parse("2026-10-02T04:00:00Z"), BigDecimal.valueOf(1200), "[환기 부족] 필터 교체"),
                 // 기간 시작(서울 10/1 00:00 = 9/30 15:00Z) 전에 시작한 구간은 뺀다
-                new Excursion(3, 70, "co2", Instant.parse("2026-09-30T14:00:00Z"), Instant.parse("2026-09-30T16:00:00Z"), BigDecimal.valueOf(1100)));
+                new Excursion(2, 3, 70, "co2", Instant.parse("2026-09-30T14:00:00Z"), Instant.parse("2026-09-30T16:00:00Z"), BigDecimal.valueOf(1100), null));
         Model m = build(excursions, new Rows(2880, 1, null));
 
         assertThat(m.metrics()).extracting(s -> s.spaceName()).containsExactly("사무실", "실습실");
@@ -64,6 +64,7 @@ class KrSelfCheckReportBuilderTest {
         assertThat(lab.exceedances()).isEqualTo(1);
         assertThat(lab.upper()).isEqualByComparingTo("1000");
         assertThat(m.excursions()).hasSize(1);
+        assertThat(m.excursions().getFirst().action()).isEqualTo("[환기 부족] 필터 교체");
         assertThat(m.summary().excursions()).isEqualTo(1);
         assertThat(m.summary().ratio()).isEqualByComparingTo("95.65");
         assertThat(m.summary().qualityWarning()).isFalse();

@@ -53,7 +53,13 @@ public final class KrSelfCheckReportBuilder {
                           List<MetricRule> rules) {
     }
 
-    public record Excursion(long spaceId, long versionId, String metricKey, Instant startedAt, Instant endedAt, BigDecimal peakValue) {
+    /** 이탈 구간. action은 개선 조치 문구(없으면 null) */
+    public record Excursion(long id, long spaceId, long versionId, String metricKey, Instant startedAt, Instant endedAt, BigDecimal peakValue,
+                            String action) {
+
+        public Excursion withAction(String text) {
+            return new Excursion(id, spaceId, versionId, metricKey, startedAt, endedAt, peakValue, text);
+        }
     }
 
     public record Device(long id, String name, String spacePath, String model, List<String> metrics, LocalDate lastCalibratedOn,
@@ -80,7 +86,7 @@ public final class KrSelfCheckReportBuilder {
             exceedances.merge(x.spaceId() + ":" + x.versionId() + ":" + x.metricKey(), 1, Integer::sum);
             SpaceItem s = spaceById.get(x.spaceId());
             excursionItems.add(new ExcursionItem(x.spaceId(), s == null ? null : s.name(), x.metricKey(), x.startedAt(), x.endedAt(),
-                    scale1(x.peakValue()), null));
+                    scale1(x.peakValue()), x.action()));
         }
         excursionItems.sort(Comparator.comparing((ExcursionItem e) -> path(spaceById, e.spaceId())).thenComparing(ExcursionItem::metricKey)
                 .thenComparing(ExcursionItem::startedAt));
