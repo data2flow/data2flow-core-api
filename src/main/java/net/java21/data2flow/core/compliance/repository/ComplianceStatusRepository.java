@@ -215,9 +215,11 @@ public class ComplianceStatusRepository {
                 .param("now", Pg.ts(now)).query(Long.class).single();
     }
 
-    public void updateExcursion(long id, Instant endedAt, BigDecimal peak, Instant now) {
-        jdbc.sql("UPDATE data2flow_core.compliance_excursions SET ended_at = :end, peak_value = :peak, updated_at = :now WHERE id = :id")
-                .param("id", id).param("end", endedAt == null ? null : Pg.ts(endedAt)).param("peak", peak).param("now", Pg.ts(now)).update();
+    public void updateExcursion(long orgId, long id, Instant endedAt, BigDecimal peak, Instant now) {
+        jdbc.sql("""
+                        UPDATE data2flow_core.compliance_excursions SET ended_at = :end, peak_value = :peak, updated_at = :now
+                         WHERE organization_id = :org AND id = :id""")
+                .param("org", orgId).param("id", id).param("end", endedAt == null ? null : Pg.ts(endedAt)).param("peak", peak).param("now", Pg.ts(now)).update();
     }
 
     /** 공간의 이탈 구간 중 [from, to)와 겹치는 것(최근부터) */

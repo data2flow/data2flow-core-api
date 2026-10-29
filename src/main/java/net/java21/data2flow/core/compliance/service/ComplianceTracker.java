@@ -152,7 +152,7 @@ public class ComplianceTracker {
             if (open.isPresent() && !openHandled && open.get().startedAt().isBefore(windowStart) && run.fromStart()) {
                 ExcursionRow o = open.get();
                 BigDecimal merged = limit.deviation(o.peakValue().doubleValue()) >= limit.deviation(run.peakValue()) ? o.peakValue() : peak;
-                status.updateExcursion(o.id(), run.endedAt(), merged, now);
+                status.updateExcursion(orgId, o.id(), run.endedAt(), merged, now);
                 if (run.endedAt() != null) {
                     publish(EventType.COMPLIANCE_EXCURSION_ENDED, orgId, o.id(), spaceId, metric, versionId, o.startedAt(), run.endedAt(), merged);
                 }
@@ -162,7 +162,7 @@ public class ComplianceTracker {
             Optional<ExcursionRow> existing = status.excursionStartedAt(spaceId, versionId, metric, run.startedAt());
             if (existing.isPresent()) {
                 ExcursionRow x = existing.get();
-                status.updateExcursion(x.id(), run.endedAt(), peak, now);
+                status.updateExcursion(orgId, x.id(), run.endedAt(), peak, now);
                 if (x.endedAt() == null && run.endedAt() != null) {
                     publish(EventType.COMPLIANCE_EXCURSION_ENDED, orgId, x.id(), spaceId, metric, versionId, x.startedAt(), run.endedAt(), peak);
                 }
@@ -190,7 +190,7 @@ public class ComplianceTracker {
 
     private void closeStale(long orgId, ExcursionRow o, Instant at, String metric, long versionId, Instant now) {
         Instant end = at.isAfter(o.startedAt()) ? at : o.startedAt().plus(Duration.ofMinutes(1));
-        status.updateExcursion(o.id(), end, o.peakValue(), now);
+        status.updateExcursion(orgId, o.id(), end, o.peakValue(), now);
         publish(EventType.COMPLIANCE_EXCURSION_ENDED, orgId, o.id(), o.spaceId(), metric, versionId, o.startedAt(), end, o.peakValue());
     }
 
