@@ -10,6 +10,7 @@ import java.util.Set;
  * 위젯 종류와 대상 규칙(design/api/DSH-api.md §3 위젯 옵션, API-DSH-13). M5에서 데이터를 주는 종류만 저장할 수 있다.
  * 제어(control, DSH-04.03 M7)·KPI(kpi, ANA-09.03 M7)는 그 기능이 생길 때 열고 지금은 WIDGET_TYPE_UNSUPPORTED다.
  * 분석 결과(analysis, DSH-04.04)는 M6에서 열었다: 대상 없이 옵션 {@code analysisId}(필수)·{@code chartId}·{@code show}·{@code metricKeys}.
+ * 에너지(energy-kpi·energy-trend, ENE-01.05)는 공간 대상 0~1개(없으면 포트폴리오)로 API-ENE-10의 totals·series를 그대로 쓴다.
  */
 public final class WidgetTypes {
 
@@ -52,6 +53,10 @@ public final class WidgetTypes {
         add("markdown", "메모", 0, 0, List.of(), props("content", Map.of("type", "string", "maxLength", 10_000)));
         add("analysis", "분석 결과", 0, 0, List.of(), props("analysisId", Map.of("type", "id"), "chartId", str(),
                 "show", enumOf("chart", "metrics", "both"), "metricKeys", array()));
+        add("energy-kpi", "에너지 지표", 0, 1, List.of(SPACE), props(
+                "compare", enumOf("PREVIOUS_PERIOD", "SAME_PERIOD_LAST_YEAR", "BASELINE"), "drilldown", integer(0, 10)));
+        add("energy-trend", "에너지 추이", 0, 1, List.of(SPACE), props(
+                "granularity", enumOf("DAY", "MONTH"), "measure", enumOf("kwh", "krw", "tco2"), "baseline", bool()));
     }
 
     private WidgetTypes() {

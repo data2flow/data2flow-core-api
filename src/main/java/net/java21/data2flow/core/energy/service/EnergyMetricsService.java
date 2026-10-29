@@ -2,7 +2,9 @@ package net.java21.data2flow.core.energy.service;
 
 import net.java21.data2flow.contracts.authz.Permission;
 import net.java21.data2flow.contracts.authz.RoleChecker;
+import net.java21.data2flow.contracts.authz.SpaceScope;
 import net.java21.data2flow.contracts.error.CommonErrorCode;
+import net.java21.data2flow.contracts.identity.DataflowHeaders;
 import net.java21.data2flow.contracts.web.PageParams;
 import net.java21.data2flow.core.analytics.service.AnalyticsClient;
 import net.java21.data2flow.core.energy.domain.EnergyErrorCode;
@@ -25,6 +27,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * 에너지 지표(API-ENE-10)와 하위 단위 순위(API-ENE-11). 롤업 계산(BR-ENE-01·02·07)은 analytics가 하고(API-ENE-85), core는 권한 범위로 자른
@@ -94,17 +97,54 @@ public class EnergyMetricsService {
     }
 
     private JsonNode call(String scopeSpaceId, String from, String to, String granularity, String compare) {
+        Prepared p = prepare(scopeSpaceId, from, to, granularity, compare);
+        JsonNode r = analytics.call(HttpMethod.POST, PATH, null, p.body(), EnergyErrorCode.SPACE_NOT_FOUND);
+        return finish(r, p);
+    }
+
+    /**
+     * API-ENE-85 요청 본문(권한 범위로 자른 공간 트리, 기준선 비교면 활성 버전 모델 키). 월간 리포트(API-ENE-13)는 요청할 때 만든 본문을 저장해 두고
+     * 생성 작업이 그대로 다시 보낸다(작업에는 요청자 권한 문맥이 없다)
+     */
+    public Prepared prepare(String scopeSpaceId, String from, String to, String granularity, String compare) {
         long orgId = roleChecker.currentUser().organizationId();
         Long scope = EnergyAccess.id(scopeSpaceId, EnergyErrorCode.SPACE_NOT_FOUND);
         String prefix = null;
+        String scopeName = null;
         if (scope != null) {
             SpaceRow space = access.space(Permission.ENE_READ, orgId, scope);
             prefix = space.path();
+            scopeName = space.name();
         } else {
             roleChecker.require(Permission.ENE_READ);
         }
+        return body(orgId, scope, prefix, scopeName, roleChecker.spaceScope(), from, to, granularity, compare);
+    }
+
+    /**
+     * 대시보드 위젯(energy-kpi·energy-trend, ENE-01.05)용 지표. 로그인 사용자가 없는 공유 링크에서도 쓰므로 위젯 문맥의 조직·공간 범위로 트리를 자르고
+     * 조직 헤더를 직접 붙인다. 범위 밖이거나 없는 공간이면 {@code forbidden}
+     */
+    @Transactional(readOnly = true)
+    public JsonNode widget(long orgId, SpaceScope allowed, Long spaceId, String from, String to, String granularity, String compare,
+                           Supplier<RuntimeException> forbidden) {
+        String prefix = null;
+        String scopeName = null;
+        if (spaceId != null) {
+            SpaceRow space = config.space(orgId, spaceId).filter(s -> allowed.includes(s.id())).orElseThrow(forbidden);
+            prefix = space.path();
+            scopeName = space.name();
+        }
+        Prepared p = body(orgId, spaceId, prefix, scopeName, allowed, from, to, granularity, compare);
+        JsonNode r = analytics.send(HttpMethod.POST, PATH, null, p.body(), h -> h.set(DataflowHeaders.ORG_ID, Long.toString(orgId)), null)
+                .response();
+        return finish(r, p);
+    }
+
+    private Prepared body(long orgId, Long scope, String prefix, String scopeName, SpaceScope allowed, String from, String to, String granularity,
+                          String compare) {
         List<Map<String, Object>> spaces = new ArrayList<>();
-        for (TreeRow t : config.spaceTree(orgId, prefix, roleChecker.spaceScope())) {
+        for (TreeRow t : config.spaceTree(orgId, prefix, allowed)) {
             Map<String, Object> node = new LinkedHashMap<>();
             node.put("id", t.id());
             node.put("parentId", t.parentId());
@@ -126,13 +166,21 @@ public class EnergyMetricsService {
         if (active != null) {
             body.put("baselineKey", active.activeModelKey());
         }
-        JsonNode r = analytics.call(HttpMethod.POST, PATH, null, body, EnergyErrorCode.SPACE_NOT_FOUND);
+        return new Prepared(body, active == null ? null : active.activeVersionId(), scopeName);
+    }
+
+    /** 응답 정리: 문자열 ID, 기준선 비교면 모델 키 대신 버전 ID */
+    public static JsonNode finish(JsonNode r, Prepared p) {
         stringIds(r);
-        if (active != null && r != null && r.get("compare") instanceof ObjectNode c) {
+        if (p.baselineVersionId() != null && r != null && r.get("compare") instanceof ObjectNode c) {
             c.remove("baselineKey");
-            c.put("baselineVersionId", Long.toString(active.activeVersionId()));
+            c.put("baselineVersionId", Long.toString(p.baselineVersionId()));
         }
         return r;
+    }
+
+    /** API-ENE-85 요청 본문과 기준선 버전·범위 이름 */
+    public record Prepared(Map<String, Object> body, Long baselineVersionId, String scopeName) {
     }
 
     /** analytics 숫자 ID → API 문자열 ID(api-rules §2) */
