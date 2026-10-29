@@ -7,6 +7,8 @@ import net.java21.data2flow.contracts.web.PageParams;
 import net.java21.data2flow.core.analytics.service.AnalyticsClient;
 import net.java21.data2flow.core.energy.domain.EnergyErrorCode;
 import net.java21.data2flow.core.energy.dto.EnergyMetricDtos.Breakdown;
+import net.java21.data2flow.core.energy.repository.EnergyBaselineRepository;
+import net.java21.data2flow.core.energy.repository.EnergyBaselineRepository.BaselineRow;
 import net.java21.data2flow.core.energy.repository.EnergyConfigRepository;
 import net.java21.data2flow.core.energy.repository.EnergyConfigRepository.SpaceRow;
 import net.java21.data2flow.core.energy.repository.EnergyConfigRepository.TreeRow;
@@ -26,7 +28,8 @@ import java.util.Set;
 
 /**
  * 에너지 지표(API-ENE-10)와 하위 단위 순위(API-ENE-11). 롤업 계산(BR-ENE-01·02·07)은 analytics가 하고(API-ENE-85), core는 권한 범위로 자른
- * 공간 트리와 상위 계량기 여부를 넘긴다. 범위가 제한된 사용자는 허용 공간만 보이고 상위 합계도 그 범위로 계산된다(TC-ENE-019)
+ * 공간 트리와 상위 계량기 여부를 넘긴다. 범위가 제한된 사용자는 허용 공간만 보이고 상위 합계도 그 범위로 계산된다(TC-ENE-019).
+ * 기준선 비교(BASELINE)는 범위 공간의 활성 기준선 버전 모델 키를 넘기고, 응답 compare에 baselineVersionId를 붙인다(ENE-01.04)
  */
 @Service
 public class EnergyMetricsService {
@@ -38,12 +41,15 @@ public class EnergyMetricsService {
     private final EnergyAccess access;
     private final EnergyConfigRepository config;
     private final AnalyticsClient analytics;
+    private final EnergyBaselineRepository baselines;
 
-    public EnergyMetricsService(RoleChecker roleChecker, EnergyAccess access, EnergyConfigRepository config, AnalyticsClient analytics) {
+    public EnergyMetricsService(RoleChecker roleChecker, EnergyAccess access, EnergyConfigRepository config, AnalyticsClient analytics,
+                                EnergyBaselineRepository baselines) {
         this.roleChecker = roleChecker;
         this.access = access;
         this.config = config;
         this.analytics = analytics;
+        this.baselines = baselines;
     }
 
     @Transactional(readOnly = true)
@@ -115,8 +121,17 @@ public class EnergyMetricsService {
         body.put("granularity", granularity);
         body.put("compare", compare);
         body.put("spaces", spaces);
+        BaselineRow active = "BASELINE".equals(compare) && scope != null
+                ? baselines.forSpace(orgId, scope).filter(b -> b.activeVersionId() != null && b.activeModelKey() != null).orElse(null) : null;
+        if (active != null) {
+            body.put("baselineKey", active.activeModelKey());
+        }
         JsonNode r = analytics.call(HttpMethod.POST, PATH, null, body, EnergyErrorCode.SPACE_NOT_FOUND);
         stringIds(r);
+        if (active != null && r != null && r.get("compare") instanceof ObjectNode c) {
+            c.remove("baselineKey");
+            c.put("baselineVersionId", Long.toString(active.activeVersionId()));
+        }
         return r;
     }
 
