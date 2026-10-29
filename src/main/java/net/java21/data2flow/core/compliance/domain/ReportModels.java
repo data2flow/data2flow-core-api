@@ -50,7 +50,7 @@ public final class ReportModels {
     public record Unmeasurable(String metricKey, String status, List<String> spacesWithout) {
     }
 
-    /** 이탈 구간과 개선 조치(CMP-02.05가 붙으면 조치 내용이 채워진다) */
+    /** 이탈 구간과 개선 조치 문구(CMP-02.05, 조치가 없으면 null) */
     public record ExcursionItem(long spaceId, String spaceName, String metricKey, Instant startedAt, Instant endedAt, BigDecimal peakValue,
                                 String action) {
     }

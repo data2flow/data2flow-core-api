@@ -21,6 +21,8 @@ import net.java21.data2flow.core.compliance.dto.ComplianceStatusDtos.StreakView;
 import net.java21.data2flow.core.compliance.repository.ComplianceApplicationRepository;
 import net.java21.data2flow.core.compliance.repository.ComplianceApplicationRepository.SpaceRow;
 import net.java21.data2flow.core.compliance.repository.ComplianceStatusRepository;
+import net.java21.data2flow.core.compliance.repository.ComplianceStatusRepository.ExcursionRow;
+import net.java21.data2flow.core.compliance.repository.CorrectiveActionRepository;
 import net.java21.data2flow.core.compliance.repository.ComplianceStatusRepository.DailyRow;
 import net.java21.data2flow.core.compliance.repository.ComplianceStatusRepository.ScoreRow;
 import net.java21.data2flow.core.compliance.repository.ComplianceStatusRepository.StreakRow;
@@ -66,13 +68,15 @@ public class ComplianceStatusService {
 
     private final ComplianceApplicationRepository applications;
     private final ComplianceStatusRepository status;
+    private final CorrectiveActionRepository actions;
     private final RoleChecker roleChecker;
     private final Clock clock;
 
-    public ComplianceStatusService(ComplianceApplicationRepository applications, ComplianceStatusRepository status, RoleChecker roleChecker,
-                                   Clock clock) {
+    public ComplianceStatusService(ComplianceApplicationRepository applications, ComplianceStatusRepository status,
+                                   CorrectiveActionRepository actions, RoleChecker roleChecker, Clock clock) {
         this.applications = applications;
         this.status = status;
+        this.actions = actions;
         this.roleChecker = roleChecker;
         this.clock = clock;
     }
@@ -128,10 +132,12 @@ public class ComplianceStatusService {
             daily.add(new DailyView(day, s.ratio(), s.met, s.exceeded, s.missing, rows.stream().anyMatch(DailyRow::qualityWarning), metrics));
         });
         ZoneId zone = ZoneId.of(status.timezone(orgId));
-        List<ExcursionView> excursions = status.excursions(orgId, spaceId, profile, period[0].atStartOfDay(zone).toInstant(),
-                        period[1].plusDays(1).atStartOfDay(zone).toInstant()).stream()
+        List<ExcursionRow> rows = status.excursions(orgId, spaceId, profile, period[0].atStartOfDay(zone).toInstant(),
+                period[1].plusDays(1).atStartOfDay(zone).toInstant());
+        Set<Long> withActions = actions.excursionsWithActions(orgId, rows.stream().map(ExcursionRow::id).toList());
+        List<ExcursionView> excursions = rows.stream()
                 .map(x -> new ExcursionView(Long.toString(x.id()), x.metricKey(), x.startedAt(), x.endedAt(), x.peakValue(),
-                        x.alarmId() == null ? null : Long.toString(x.alarmId()), false)).toList();
+                        x.alarmId() == null ? null : Long.toString(x.alarmId()), withActions.contains(x.id()))).toList();
         return new SpaceStatusView(daily, excursions);
     }
 

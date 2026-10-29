@@ -269,14 +269,14 @@ public class ComplianceReportRepository {
             return List.of();
         }
         return jdbc.sql("""
-                        SELECT space_id, profile_version_id, metric_key, started_at, ended_at, peak_value FROM data2flow_core.compliance_excursions
+                        SELECT id, space_id, profile_version_id, metric_key, started_at, ended_at, peak_value FROM data2flow_core.compliance_excursions
                          WHERE organization_id = :org AND space_id = ANY(CAST(:spaces AS bigint[]))
                            AND profile_version_id = ANY(CAST(:versions AS bigint[])) AND started_at < :to AND (ended_at IS NULL OR ended_at > :from)
                          ORDER BY space_id, metric_key, started_at""")
                 .param("org", orgId).param("spaces", Pg.bigintArray(spaceIds)).param("versions", Pg.bigintArray(versionIds))
                 .param("from", Pg.ts(from)).param("to", Pg.ts(to))
-                .query((rs, n) -> new Excursion(rs.getLong("space_id"), rs.getLong("profile_version_id"), rs.getString("metric_key"),
-                        Pg.instant(rs, "started_at"), Pg.instant(rs, "ended_at"), rs.getBigDecimal("peak_value"))).list();
+                .query((rs, n) -> new Excursion(rs.getLong("id"), rs.getLong("space_id"), rs.getLong("profile_version_id"), rs.getString("metric_key"),
+                        Pg.instant(rs, "started_at"), Pg.instant(rs, "ended_at"), rs.getBigDecimal("peak_value"), null)).list();
     }
 
     /** 기간의 1분 집계 행 수(실제 기기만) */

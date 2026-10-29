@@ -164,7 +164,7 @@ public final class DailyComplianceEvaluator {
         };
     }
 
-    private static Double average(NavigableMap<Instant, Double> window) {
+    static Double average(NavigableMap<Instant, Double> window) {
         if (window.isEmpty()) {
             return null;
         }
