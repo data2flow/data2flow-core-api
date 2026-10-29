@@ -25,12 +25,13 @@ import java.util.Set;
 public final class TestDatabase {
 
     /**
-     * 비우지 않는 테이블: Flyway 이력, 감사 로그(INSERT 전용), 마이그레이션 시드(시스템 공용 카탈로그·템플릿·기준 프로필).
-     * 기준 프로필 표는 시스템 행(organization_id 0)만 남기고 지운다({@link #truncateAll})
+     * 비우지 않는 테이블: Flyway 이력, 감사 로그(INSERT 전용), 마이그레이션 시드(시스템 공용 카탈로그·템플릿·기준 프로필·기본 배출계수).
+     * 기준 프로필·배출계수 표는 시스템 행(organization_id 0)만 남기고 지운다({@link #truncateAll})
      */
     static final Set<String> KEEP = Set.of("flyway_schema_history", "audit_logs", "audit_logs_default",
             "connector_catalogs", "connector_templates", "rule_templates", "notification_templates",
-            "compliance_profiles", "compliance_profile_versions", "profile_metric_rules", "profile_grade_bands", "profile_coverage_rules");
+            "compliance_profiles", "compliance_profile_versions", "profile_metric_rules", "profile_grade_bands", "profile_coverage_rules",
+            "energy_emission_factors");
 
     private static volatile String truncateSql;
 
@@ -78,5 +79,6 @@ public final class TestDatabase {
         // 조직 프로필은 버전·규칙·등급·적정성까지 FK로 함께 지워지고, 적용에 잠긴 시스템 버전은 시드 상태로 되돌린다
         jdbc.sql("DELETE FROM data2flow_core.compliance_profiles WHERE organization_id <> 0").update();
         jdbc.sql("UPDATE data2flow_core.compliance_profile_versions SET locked = false WHERE organization_id = 0 AND locked").update();
+        jdbc.sql("DELETE FROM data2flow_core.energy_emission_factors WHERE organization_id <> 0").update();
     }
 }
