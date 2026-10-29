@@ -1,5 +1,6 @@
 package net.java21.data2flow.core.energy.repository;
 
+import net.java21.data2flow.contracts.tenancy.OrganizationScopeExempt;
 import net.java21.data2flow.core.common.Pg;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -13,6 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 
 /** 요금 단가·배출계수 저장소(ENE-01.02, {@code energy_tariffs}·{@code energy_emission_factors})와 에너지 설정이 쓰는 공간 조회 */
 @Repository
@@ -52,6 +54,31 @@ public class EnergyConfigRepository {
     }
 
     public record FactorValues(LocalDate validFrom, BigDecimal factor, String sourceTitle, int sourceYear) {
+    }
+
+    /** 설정 묶음 버전(API-ENE-70 configVersion). 설정을 한 번도 바꾸지 않았으면 0 */
+    public long configVersion(long orgId) {
+        return jdbc.sql("SELECT config_version FROM data2flow_core.energy_config_state WHERE organization_id = :org").param("org", orgId)
+                .query(Long.class).optional().orElse(0L);
+    }
+
+    /** 설정이 바뀔 때마다 버전을 하나 올린다(같은 트랜잭션) */
+    public void bumpConfigVersion(long orgId, Instant now) {
+        jdbc.sql("""
+                        INSERT INTO data2flow_core.energy_config_state (organization_id, config_version, updated_at) VALUES (:org, 1, :now)
+                        ON CONFLICT (organization_id) DO UPDATE SET config_version = energy_config_state.config_version + 1, updated_at = :now""")
+                .param("org", orgId).param("now", Pg.ts(now)).update();
+    }
+
+    /** 켜진 에너지 원천이 있는 조직(일 집계 대상). 배포 조직이 정해져 있으면 그 조직만(ADR-030) */
+    @OrganizationScopeExempt("analytics 일 집계가 원천이 있는 모든 조직을 돈다(DeploymentOrganization.restriction()으로 좁힘)")
+    public List<Long> organizationsWithSources(OptionalLong restriction) {
+        Long only = restriction.isPresent() ? restriction.getAsLong() : null;
+        return jdbc.sql("""
+                        SELECT DISTINCT e.organization_id FROM data2flow_core.energy_sources e
+                          JOIN data2flow_core.organizations o ON o.id = e.organization_id AND o.status = 'ACTIVE'
+                         WHERE e.enabled AND (CAST(:only AS bigint) IS NULL OR e.organization_id = :only) ORDER BY 1""")
+                .param("only", only).query(Long.class).list();
     }
 
     /** 조직 시간대(없으면 UTC) */
