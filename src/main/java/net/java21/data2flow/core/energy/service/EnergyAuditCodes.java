@@ -10,6 +10,8 @@ public final class EnergyAuditCodes {
     public static final String ENE_EMISSION_FACTOR_CHANGED = "ENE_EMISSION_FACTOR_CHANGED";
     public static final String ENE_SOURCE_CHANGED = "ENE_SOURCE_CHANGED";
     public static final String ENE_BILL_CHANGED = "ENE_BILL_CHANGED";
+    /** 기준선 버전 적용(UC-ENE-04) */
+    public static final String ENE_BASELINE_ACTIVATED = "ENE_BASELINE_ACTIVATED";
 
     private EnergyAuditCodes() {
     }
