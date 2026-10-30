@@ -28,12 +28,14 @@ final class SpaceAttributeRules {
 
     static final Set<String> USAGES = Set.of("CLASSROOM", "OFFICE", "MEETING", "LAB", "CORRIDOR", "OTHER");
     private static final BigDecimal MAX_AREA = new BigDecimal("99999999.99");
+    private static final BigDecimal MAX_HEIGHT = new BigDecimal("100.00");
 
     private SpaceAttributeRules() {
     }
 
     /** 검사 전 값 */
-    record Draft(String name, String code, Integer sortOrder, String usage, BigDecimal areaM2, Integer capacity, String timezone,
+    record Draft(String name, String code, Integer sortOrder, String usage, BigDecimal areaM2, BigDecimal ceilingHeightM, Integer capacity,
+                 String timezone,
                  String address, BigDecimal latitude, BigDecimal longitude) {
     }
 
@@ -60,6 +62,14 @@ final class SpaceAttributeRules {
                 errors.add(new FieldErrorDetail("areaM2", "Range", "0~99999999.99"));
             } else {
                 area = area.setScale(2, RoundingMode.HALF_UP);
+            }
+        }
+        BigDecimal height = d.ceilingHeightM();
+        if (height != null) {
+            if (height.signum() <= 0 || height.compareTo(MAX_HEIGHT) > 0) {
+                errors.add(new FieldErrorDetail("ceilingHeightM", "Range", "0~100"));
+            } else {
+                height = height.setScale(2, RoundingMode.HALF_UP);
             }
         }
         if (d.capacity() != null && d.capacity() < 0) {
@@ -106,7 +116,7 @@ final class SpaceAttributeRules {
             nx = grid.map(KmaGrid.Point::nx).orElse(null);
             ny = grid.map(KmaGrid.Point::ny).orElse(null);
         }
-        return new SpaceAttributes(name, code, d.sortOrder() == null ? 0 : d.sortOrder(), usage, area, d.capacity(),
+        return new SpaceAttributes(name, code, d.sortOrder() == null ? 0 : d.sortOrder(), usage, area, height, d.capacity(),
                 site ? timezone : null, site ? address : null, site ? lat : null, site ? lon : null, nx, ny);
     }
 

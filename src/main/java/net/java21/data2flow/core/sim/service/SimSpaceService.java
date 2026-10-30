@@ -145,12 +145,13 @@ public class SimSpaceService {
             throw new BusinessException(SpaceErrorCode.SPACE_DEPTH_EXCEEDED);
         }
         BigDecimal area = physics != null && physics.path("areaM2").isNumber() ? BigDecimal.valueOf(physics.get("areaM2").asDouble()) : null;
+        BigDecimal height = physics != null && physics.path("heightM").isNumber() ? BigDecimal.valueOf(physics.get("heightM").asDouble()) : null;
         String usage = "CUSTOM".equals(preset) ? null : preset;
         Instant now = clock.instant();
         long id;
         try {
             id = spaces.insert(new NewSpace(orgId, parent.id(), parent.path(), type, parent.depth() + 1,
-                    new SpaceAttributes(name, null, 0, usage, area, null, null, null, null, null, null, null), user.userId(), now));
+                    new SpaceAttributes(name, null, 0, usage, area, height, null, null, null, null, null, null, null), user.userId(), now));
         } catch (DuplicateKeyException ex) {
             throw new BusinessException(SpaceErrorCode.SPACE_NAME_DUPLICATE);
         }
@@ -180,7 +181,7 @@ public class SimSpaceService {
                 name = VIRTUAL_ROOT + " " + UUID.randomUUID().toString().substring(0, 4);
             }
             rootId = spaces.insert(new NewSpace(orgId, null, "/", SpaceType.SITE, 1,
-                    new SpaceAttributes(name, null, 999, null, null, null, null, null, null, null, null, null), user.userId(), now));
+                    new SpaceAttributes(name, null, 999, null, null, null, null, null, null, null, null, null, null), user.userId(), now));
             spaces.markVirtual(orgId, rootId);
             Space root = spaces.findById(orgId, rootId).orElseThrow();
             spaceSupport.changed(orgId, rootId, root.path(), "CREATED", root.version());

@@ -62,7 +62,7 @@ public class SpaceService {
 
     static final int MAX_DEPTH = 6;
     private static final Set<String> PATCH_FIELDS = Set.of("name", "code", "timezone", "address", "latitude", "longitude", "usage",
-            "areaM2", "capacity", "sortOrder", "baseVersion");
+            "areaM2", "ceilingHeightM", "capacity", "sortOrder", "baseVersion");
 
     private final SpaceRepository spaces;
     private final SpaceSettingsRepository settings;
@@ -219,7 +219,7 @@ public class SpaceService {
         SpaceInheritance.EffectiveSchedule schedule = SpaceInheritance.schedule(chain, settings.findSlots(org, chainIds));
         SpaceResponse r = SpaceSupport.toResponse(s);
         return new SpaceDetailResponse(r.id(), r.parentId(), r.type(), r.name(), r.code(), r.path(), r.depth(), r.sortOrder(),
-                r.usage(), r.areaM2(), r.capacity(), r.timezone(), r.address(), r.latitude(), r.longitude(), r.kmaNx(), r.kmaNy(),
+                r.usage(), r.areaM2(), r.ceilingHeightM(), r.capacity(), r.timezone(), r.address(), r.latitude(), r.longitude(), r.kmaNx(), r.kmaNy(),
                 r.status(), r.version(), r.updatedAt(), ancestors, SpaceSupport.zone(chain).getId(),
                 spaces.countChildren(org, s.id()), spaces.countDevicesUnder(org, s.path()),
                 floorplans.findBySpace(org, s.id()).isPresent(), targets, SpaceInheritance.scheduleResponse(chain, schedule),
@@ -254,7 +254,7 @@ public class SpaceService {
             throw new BusinessException(SpaceErrorCode.SPACE_DEPTH_EXCEEDED);
         }
         SpaceAttributes attributes = SpaceAttributeRules.validate(type, new Draft(req.name(), req.code(), req.sortOrder(),
-                req.usage(), req.areaM2(), req.capacity(), req.timezone(), req.address(), req.latitude(), req.longitude()));
+                req.usage(), req.areaM2(), req.ceilingHeightM(), req.capacity(), req.timezone(), req.address(), req.latitude(), req.longitude()));
         requireUniqueName(org, parentId, attributes.name(), null);
         requireUniqueCode(org, attributes.code(), null);
         Instant now = clock.instant();
@@ -290,7 +290,8 @@ public class SpaceService {
         Draft d = new Draft(
                 text(body, "name", s.name(), errors), text(body, "code", s.code(), errors),
                 integer(body, "sortOrder", s.sortOrder(), errors), text(body, "usage", s.usage(), errors),
-                decimal(body, "areaM2", s.areaM2(), errors), integer(body, "capacity", s.capacity(), errors),
+                decimal(body, "areaM2", s.areaM2(), errors),
+                decimal(body, "ceilingHeightM", s.ceilingHeightM(), errors), integer(body, "capacity", s.capacity(), errors),
                 text(body, "timezone", s.timezone(), errors), text(body, "address", s.address(), errors),
                 decimal(body, "latitude", s.latitude(), errors), decimal(body, "longitude", s.longitude(), errors));
         if (!errors.isEmpty()) {
