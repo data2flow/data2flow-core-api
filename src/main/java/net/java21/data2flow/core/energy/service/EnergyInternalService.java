@@ -7,6 +7,7 @@ import net.java21.data2flow.core.energy.dto.EnergyInternalDtos.Organizations;
 import net.java21.data2flow.core.energy.repository.EnergyConfigRepository;
 import net.java21.data2flow.core.energy.repository.EnergySourceRepository;
 import net.java21.data2flow.core.energy.repository.EnergySourceRepository.MeterRow;
+import net.java21.data2flow.core.energy.repository.VirtualSensorRepository;
 import net.java21.data2flow.core.organization.service.DeploymentOrganization;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,9 +20,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeSet;
 
 /**
- * API-ENE-70 에너지 설정 묶음: analytics 일 집계(ENE-01.01·01.02)가 쓰는 단가·배출계수·켜진 원천·사이트 휴일과 configVersion.
+ * API-ENE-70 에너지 설정 묶음: analytics 일 집계(ENE-01.01·01.02)가 쓰는 단가·배출계수·켜진 원천·사이트 휴일, 가상 센서(ENE-02)와 configVersion.
  * analytics는 5분 캐시하고 EVT-ENE-07을 받으면 지운다
  */
 @Service
@@ -35,23 +37,30 @@ public class EnergyInternalService {
     private final TariffService tariffs;
     private final EmissionFactorService factors;
     private final HolidayLookup holidays;
+    private final VirtualSensorRepository virtualSensors;
+    private final VirtualSensorService sensors;
     private final DeploymentOrganization deployment;
     private final Clock clock;
 
     public EnergyInternalService(EnergyConfigRepository config, EnergySourceRepository sources, TariffService tariffs,
-                                 EmissionFactorService factors, HolidayLookup holidays, DeploymentOrganization deployment, Clock clock) {
+                                 EmissionFactorService factors, HolidayLookup holidays, VirtualSensorRepository virtualSensors,
+                                 VirtualSensorService sensors, DeploymentOrganization deployment, Clock clock) {
         this.config = config;
         this.sources = sources;
         this.tariffs = tariffs;
         this.factors = factors;
         this.holidays = holidays;
+        this.virtualSensors = virtualSensors;
+        this.sensors = sensors;
         this.deployment = deployment;
         this.clock = clock;
     }
 
     @Transactional(readOnly = true)
     public Organizations organizations() {
-        return new Organizations(config.organizationsWithSources(deployment.restriction()).stream().map(String::valueOf).toList());
+        TreeSet<Long> orgs = new TreeSet<>(config.organizationsWithSources(deployment.restriction()));
+        orgs.addAll(virtualSensors.organizations(deployment.restriction()));
+        return new Organizations(orgs.stream().map(String::valueOf).toList());
     }
 
     @Transactional(readOnly = true)
@@ -65,7 +74,7 @@ public class EnergyInternalService {
             siteHolidays.put(site.toString(), holidaysOf(orgId, site, LocalDate.now(clock.withZone(ZoneId.of(tz)))));
         });
         return new ConfigBundle(Long.toString(orgId), timezone, tariffs.listOf(orgId), factors.listOf(orgId), meters.stream().map(EnergyInternalService::meter).toList(),
-                siteHolidays, List.of(), List.of(), Map.of(), version, clock.instant());
+                siteHolidays, List.of(), sensors.bundle(orgId), Map.of(), version, clock.instant());
     }
 
     private List<LocalDate> holidaysOf(long orgId, long siteId, LocalDate today) {

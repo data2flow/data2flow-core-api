@@ -147,7 +147,7 @@ public class SpaceSupport {
 
     public static SpaceResponse toResponse(Space s) {
         return new SpaceResponse(Long.toString(s.id()), id(s.parentId()), s.type().name(), s.name(), s.code(), Space.eventPath(s.path()),
-                s.depth(), s.sortOrder(), s.usage(), s.areaM2(), s.capacity(), s.timezone(), s.address(), s.latitude(),
+                s.depth(), s.sortOrder(), s.usage(), s.areaM2(), s.ceilingHeightM(), s.capacity(), s.timezone(), s.address(), s.latitude(),
                 s.longitude(), s.kmaNx(), s.kmaNy(), s.status(), s.version(), s.updatedAt());
     }
 }

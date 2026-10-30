@@ -17,14 +17,14 @@ public final class SpaceDtos {
 
     /** API-DEV-02 요청 */
     public record CreateSpaceRequest(String parentId, String type, String name, String code, String timezone, String address,
-                                     BigDecimal latitude, BigDecimal longitude, String usage, BigDecimal areaM2, Integer capacity,
+                                     BigDecimal latitude, BigDecimal longitude, String usage, BigDecimal areaM2, BigDecimal ceilingHeightM, Integer capacity,
                                      Integer sortOrder) {
     }
 
     /** API-DEV-02·03·04 응답(공간 한 개) */
     @JsonInclude(JsonInclude.Include.ALWAYS)
     public record SpaceResponse(String id, String parentId, String type, String name, String code, String path, int depth,
-                                int sortOrder, String usage, BigDecimal areaM2, Integer capacity, String timezone, String address,
+                                int sortOrder, String usage, BigDecimal areaM2, BigDecimal ceilingHeightM, Integer capacity, String timezone, String address,
                                 BigDecimal latitude, BigDecimal longitude, Integer kmaNx, Integer kmaNy, String status, int version,
                                 Instant updatedAt) {
     }
@@ -36,7 +36,7 @@ public final class SpaceDtos {
     /** 공간 상세(GET /core/spaces/{space-id}, 사전 작업으로 추가): 속성 + 조상 경로·유효 시간대·개수·목표·시간표·모드 요약 */
     @JsonInclude(JsonInclude.Include.ALWAYS)
     public record SpaceDetailResponse(String id, String parentId, String type, String name, String code, String path, int depth,
-                                      int sortOrder, String usage, BigDecimal areaM2, Integer capacity, String timezone,
+                                      int sortOrder, String usage, BigDecimal areaM2, BigDecimal ceilingHeightM, Integer capacity, String timezone,
                                       String address, BigDecimal latitude, BigDecimal longitude, Integer kmaNx, Integer kmaNy,
                                       String status, int version, Instant updatedAt, List<SpaceRef> ancestors,
                                       String effectiveTimezone, long childCount, long deviceCount, boolean hasFloorplan,

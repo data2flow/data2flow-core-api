@@ -24,13 +24,13 @@ import java.util.OptionalLong;
 public class SpaceRepository {
 
     static final String COLUMNS = """
-            s.id, s.organization_id, s.parent_id, s.type, s.name, s.code, s.path, s.depth, s.sort_order, s.usage, s.area_m2,
+            s.id, s.organization_id, s.parent_id, s.type, s.name, s.code, s.path, s.depth, s.sort_order, s.usage, s.area_m2, s.ceiling_height_m,
             s.capacity, s.timezone, s.address, s.latitude, s.longitude, s.kma_nx, s.kma_ny, s.mode_override, s.mode_override_until,
             s.schedule_inherit, s.status, s.version, s.created_at, s.updated_at, s.is_virtual, s.sandbox""";
 
     static final RowMapper<Space> MAPPER = (rs, n) -> new Space(rs.getLong("id"), rs.getLong("organization_id"),
             Pg.longOrNull(rs, "parent_id"), SpaceType.valueOf(rs.getString("type")), rs.getString("name"), rs.getString("code"),
-            rs.getString("path"), rs.getInt("depth"), rs.getInt("sort_order"), rs.getString("usage"), rs.getBigDecimal("area_m2"),
+            rs.getString("path"), rs.getInt("depth"), rs.getInt("sort_order"), rs.getString("usage"), rs.getBigDecimal("area_m2"), rs.getBigDecimal("ceiling_height_m"),
             intOrNull(rs.getObject("capacity")), rs.getString("timezone"), rs.getString("address"), rs.getBigDecimal("latitude"),
             rs.getBigDecimal("longitude"), intOrNull(rs.getObject("kma_nx")), intOrNull(rs.getObject("kma_ny")),
             rs.getString("mode_override"), Pg.instant(rs, "mode_override_until"), rs.getBoolean("schedule_inherit"),
@@ -109,9 +109,9 @@ public class SpaceRepository {
     public long insert(NewSpace s) {
         long id = jdbc.sql("""
                         INSERT INTO data2flow_core.spaces (organization_id, parent_id, type, name, code, path, depth, sort_order, usage,
-                                                           area_m2, capacity, timezone, address, latitude, longitude, kma_nx, kma_ny,
+                                                           area_m2, ceiling_height_m, capacity, timezone, address, latitude, longitude, kma_nx, kma_ny,
                                                            created_by, updated_by, created_at, updated_at)
-                        VALUES (:org, :parent, :type, :name, :code, '/', :depth, :sortOrder, :usage, :area, :capacity, :tz, :address,
+                        VALUES (:org, :parent, :type, :name, :code, '/', :depth, :sortOrder, :usage, :area, :height, :capacity, :tz, :address,
                                 :lat, :lon, :nx, :ny, :user, :user, :now, :now)
                         RETURNING id""")
                 .params(attributeParams(s.attributes()))
@@ -151,7 +151,8 @@ public class SpaceRepository {
     public int updateAttributes(long organizationId, long id, int baseVersion, SpaceAttributes a, Long userId, Instant now) {
         return jdbc.sql("""
                         UPDATE data2flow_core.spaces
-                           SET name = :name, code = :code, sort_order = :sortOrder, usage = :usage, area_m2 = :area, capacity = :capacity,
+                           SET name = :name, code = :code, sort_order = :sortOrder, usage = :usage, area_m2 = :area,
+                               ceiling_height_m = :height, capacity = :capacity,
                                timezone = :tz, address = :address, latitude = :lat, longitude = :lon, kma_nx = :nx, kma_ny = :ny,
                                version = version + 1, updated_by = :user, updated_at = :now
                          WHERE organization_id = :org AND id = :id AND version = :base AND status = 'ACTIVE'""")
@@ -167,6 +168,7 @@ public class SpaceRepository {
         p.put("sortOrder", a.sortOrder());
         p.put("usage", a.usage());
         p.put("area", a.areaM2());
+        p.put("height", a.ceilingHeightM());
         p.put("capacity", a.capacity());
         p.put("tz", a.timezone());
         p.put("address", a.address());
@@ -281,8 +283,8 @@ public class SpaceRepository {
     }
 
     /** 공간 속성(만들기·수정 공통). 위·경도가 있으면 격자도 계산해 넣는다 */
-    public record SpaceAttributes(String name, String code, int sortOrder, String usage, BigDecimal areaM2, Integer capacity,
-                                  String timezone, String address, BigDecimal latitude, BigDecimal longitude, Integer kmaNx,
+    public record SpaceAttributes(String name, String code, int sortOrder, String usage, BigDecimal areaM2, BigDecimal ceilingHeightM,
+                                  Integer capacity, String timezone, String address, BigDecimal latitude, BigDecimal longitude, Integer kmaNx,
                                   Integer kmaNy) {
     }
 

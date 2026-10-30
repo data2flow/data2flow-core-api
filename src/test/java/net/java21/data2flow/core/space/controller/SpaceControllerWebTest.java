@@ -83,7 +83,7 @@ class SpaceControllerWebTest {
     @Test
     @DisplayName("[DEV-01.01][TC-DEV-002] 생성 201 + Location, ID는 문자열 / 깊이 초과 400 SPACE_DEPTH_EXCEEDED(en 문구)")
     void createAndDepth() throws Exception {
-        given(spaces.create(any())).willReturn(new SpaceResponse("7", "3", "ROOM", "실습실", null, "/1/3/7", 3, 0, null, null, null,
+        given(spaces.create(any())).willReturn(new SpaceResponse("7", "3", "ROOM", "실습실", null, "/1/3/7", 3, 0, null, null, null, null,
                 null, null, null, null, null, null, "ACTIVE", 0, Instant.parse("2026-10-03T00:00:00Z")));
         mvc.perform(body(post("/core/spaces"), "{\"parentId\":\"3\",\"type\":\"ROOM\",\"name\":\"실습실\"}"))
                 .andExpect(status().isCreated())

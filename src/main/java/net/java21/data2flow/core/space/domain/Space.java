@@ -9,7 +9,7 @@ import java.util.List;
  * 공간 한 행({@code data2flow_core.spaces}). {@code path}는 조상 ID를 / 로 이은 경로(예: {@code /1/4/9/}, 자기 자신 포함).
  */
 public record Space(long id, long organizationId, Long parentId, SpaceType type, String name, String code, String path,
-                    int depth, int sortOrder, String usage, BigDecimal areaM2, Integer capacity, String timezone,
+                    int depth, int sortOrder, String usage, BigDecimal areaM2, BigDecimal ceilingHeightM, Integer capacity, String timezone,
                     String address, BigDecimal latitude, BigDecimal longitude, Integer kmaNx, Integer kmaNy,
                     String modeOverride, Instant modeOverrideUntil, boolean scheduleInherit, String status, int version,
                     Instant createdAt, Instant updatedAt, boolean virtual, boolean sandbox) {

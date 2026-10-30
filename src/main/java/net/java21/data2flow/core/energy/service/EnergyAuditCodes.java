@@ -13,6 +13,9 @@ public final class EnergyAuditCodes {
     /** 기준선 버전 적용(UC-ENE-04) */
     public static final String ENE_BASELINE_ACTIVATED = "ENE_BASELINE_ACTIVATED";
 
+    /** 가상 센서 켜기·끄기·설정(UC-ENE-06~08) */
+    public static final String ENE_VIRTUAL_SENSOR_CHANGED = "ENE_VIRTUAL_SENSOR_CHANGED";
+
     private EnergyAuditCodes() {
     }
 }
