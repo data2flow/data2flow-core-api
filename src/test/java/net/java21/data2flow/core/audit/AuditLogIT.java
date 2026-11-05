@@ -167,6 +167,9 @@ class AuditLogIT extends IntegrationTestSupport {
     @Test
     @DisplayName("[IAM-06.02][ERD §10] 정리 작업은 감사 로그 월 파티션을 3개월 앞까지 만든다(멱등)")
     void partitionsCreated() {
+        // 다른 시험이 실제 시각(DB now())으로 쓴 감사 로그가 DEFAULT 파티션에 있으면 그 달 파티션을 만들 수 없다(실행 날짜에 따라 깨짐).
+        // 이 시험은 시험 시계(T0) 기준 파티션 생성만 본다
+        jdbc.sql("TRUNCATE data2flow_core.audit_logs_default").update();
         assertThat(jobs.runOnce()).isTrue();
         assertThat(jobs.runOnce()).isTrue();
         Long count = jdbc.sql("""
