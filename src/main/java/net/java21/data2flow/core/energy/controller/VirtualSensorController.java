@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** 공간 가상 센서(ENE-02, API-ENE-20·21): 조회 ENE_READ, 변경 ENE_ADMIN */
+/** 공간 가상 센서(ENE-02, API-ENE-20~22): 조회 ENE_READ, 변경 ENE_ADMIN */
 @RestController
 public class VirtualSensorController {
 
@@ -33,6 +33,13 @@ public class VirtualSensorController {
     public ApiResponse<SensorView> update(@PathVariable String spaceId, @PathVariable String kind,
                                           @RequestBody(required = false) UpdateRequest body) {
         return ApiResponse.success(service.update(spaceId, kind, body));
+    }
+
+    /** API-ENE-22 재실 추정 이력(상태만, BR-ENE-10). from·to는 ISO 시각, 기본 최근 24시간 */
+    @GetMapping("/core/energy/spaces/{spaceId}/occupancy")
+    public ApiResponse<net.java21.data2flow.core.energy.dto.VirtualSensorDtos.OccupancySeries> occupancy(@PathVariable String spaceId,
+            @RequestParam(required = false) String from, @RequestParam(required = false) String to) {
+        return ApiResponse.success(service.occupancy(spaceId, from, to));
     }
 
     @GetMapping("/core/energy/spaces/{spaceId}/ach")

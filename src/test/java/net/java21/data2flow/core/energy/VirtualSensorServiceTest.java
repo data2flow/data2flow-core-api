@@ -59,7 +59,7 @@ class VirtualSensorServiceTest {
     void setUp() {
         given(roles.currentUser()).willReturn(new CurrentUser(7, 1));
         given(access.space(any(), anyLong(), anyLong())).willReturn(new SpaceRow(31, "101호", "/1/10/31/", "ROOM"));
-        given(repo.geometry(1, 31)).willReturn(Optional.of(new SpaceGeometry(31, new BigDecimal("50.00"), new BigDecimal("3.00"), "Asia/Seoul")));
+        given(repo.geometry(1, 31)).willReturn(Optional.of(new SpaceGeometry(31, "101", new BigDecimal("50.00"), new BigDecimal("3.00"), 10, "Asia/Seoul")));
         given(repo.inputDevices(1, 31, "co2")).willReturn(List.of(3001L));
     }
 
@@ -71,7 +71,7 @@ class VirtualSensorServiceTest {
     @CsvSource({"50.00,", ",3.00", ","})
     @DisplayName("[TC-ENE-036] 면적이나 층고가 없으면 ACH를 켤 수 없다(409 ENE_SPACE_VOLUME_REQUIRED), 저장·이벤트 없음")
     void volumeRequired(BigDecimal area, BigDecimal height) {
-        given(repo.geometry(1, 31)).willReturn(Optional.of(new SpaceGeometry(31, area, height, "Asia/Seoul")));
+        given(repo.geometry(1, 31)).willReturn(Optional.of(new SpaceGeometry(31, "101", area, height, 10, "Asia/Seoul")));
         assertThatThrownBy(() -> service.update("31", "ach", on(null)))
                 .isInstanceOfSatisfying(BusinessException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(EnergyErrorCode.ENE_SPACE_VOLUME_REQUIRED));
         verify(repo, never()).upsert(anyLong(), anyLong(), anyString(), anyBoolean(), anyString(), any(), anyLong(), any());
@@ -86,7 +86,7 @@ class VirtualSensorServiceTest {
             assertThat(ex.getErrorCode()).isEqualTo(EnergyErrorCode.ENE_VIRTUAL_SENSOR_INPUT_MISSING);
             assertThat(ex.getErrors()).extracting(e -> e.field() + ":" + e.code()).containsExactly("inputs:co2");
         });
-        given(repo.geometry(1, 31)).willReturn(Optional.of(new SpaceGeometry(31, null, null, "Asia/Seoul")));
+        given(repo.geometry(1, 31)).willReturn(Optional.of(new SpaceGeometry(31, "101", null, null, 10, "Asia/Seoul")));
         given(repo.find(1, 31, "ACH")).willReturn(Optional.of(row(false, null)));
         assertThat(service.update("31", "ach", new UpdateRequest(false, null)).status()).isEqualTo("DISABLED");
     }
@@ -122,7 +122,7 @@ class VirtualSensorServiceTest {
     @Test
     @DisplayName("[ENE-02.01] 아직 받지 않는 종류·없는 종류는 400, enabled가 없으면 400")
     void kindAndBody() {
-        assertThatThrownBy(() -> service.update("31", "occupancy", on(null))).isInstanceOf(BusinessException.class)
+        assertThatThrownBy(() -> service.update("31", "thermal_comfort", on(null))).isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getErrors().getFirst().code()).isEqualTo("NOT_SUPPORTED");
         assertThatThrownBy(() -> service.update("31", "foo", on(null))).isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getErrors().getFirst().code()).isEqualTo("INVALID");
@@ -148,5 +148,64 @@ class VirtualSensorServiceTest {
     private static ConfigRow row(boolean enabled, String lastStatus) {
         return new ConfigRow(31, "ACH", enabled, "{\"outdoorCo2Mode\":\"FIXED\",\"outdoorCo2Ppm\":420,\"minDecayMinutes\":30}", List.of("ach", "ventilation_m3h"),
                 lastStatus, "INPUT_MISSING".equals(lastStatus) ? List.of("co2") : null, lastStatus == null ? null : NOW, 0, NOW);
+    }
+
+    @Test
+    @DisplayName("[ENE-02.02] 재실 추정: 고른 신호 중 기기가 있는 것이 2개 미만이면 409 INPUT_MISSING(없는 신호), 2개 이상이면 가상 기기를 만들고 켠다")
+    void occupancyInputs() {
+        given(repo.inputDevices(1, 31, "activity")).willReturn(List.of());
+        given(repo.inputDevices(1, 31, "LAeq")).willReturn(List.of());
+        assertThatThrownBy(() -> service.update("31", "occupancy", on("{\"inputs\":[\"pir\",\"co2\",\"noise\"]}")))
+                .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(EnergyErrorCode.ENE_VIRTUAL_SENSOR_INPUT_MISSING);
+                    assertThat(ex.getErrors()).extracting(e -> e.code()).containsExactly("pir", "noise");
+                });
+        verify(repo, never()).ensureVirtualDevice(anyLong(), anyLong(), any(), anyLong(), any());
+
+        given(repo.inputDevices(1, 31, "LAeq")).willReturn(List.of(3002L));
+        given(repo.find(1, 31, "OCCUPANCY")).willReturn(Optional.of(new ConfigRow(31, "OCCUPANCY", true, "{\"inputs\":[\"co2\",\"noise\"]}",
+                List.of("occupancy_est"), null, null, null, 0, NOW)));
+        given(repo.findVirtualDevice(1, 31)).willReturn(Optional.of(9001L));
+        var view = service.update("31", "OCCUPANCY", on("{\"inputs\":[\"noise\",\"co2\"]}"));
+        verify(repo).ensureVirtualDevice(1, 31, "101", 7, NOW);
+        verify(repo).upsert(eq(1L), eq(31L), eq("OCCUPANCY"), eq(true), eq("{\"inputs\":[\"co2\",\"noise\"]}"), eq(List.of("occupancy_est")),
+                eq(7L), eq(NOW));
+        assertThat(view.status()).isEqualTo("OK");
+        assertThat(view.outputDeviceId()).isEqualTo("9001");
+        assertThat(view.current().state()).as("아직 값이 없음").isEqualTo("UNKNOWN");
+        assertThat(view.inputs()).extracting(i -> i.signal() + ":" + i.available() + ":" + i.selected())
+                .containsExactly("pir:false:false", "co2:true:true", "noise:true:true", "illuminance:false:false");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = '|', value = {
+            "{\"inputs\":[\"co2\"]}|Size",
+            "{\"inputs\":[\"co2\",\"wifi\"]}|INVALID",
+            "{\"inputs\":[\"co2\",\"co2\"]}|DUPLICATE",
+            "{\"inputs\":\"co2\"}|Type",
+            "{\"foo\":1}|UNKNOWN"})
+    @DisplayName("[ENE-02.02] 재실 추정 설정: 신호 2~4개, 정해진 값만, 중복·모르는 키는 400")
+    void occupancyParams(String params, String code) {
+        assertThatThrownBy(() -> service.update("31", "occupancy", on(params))).isInstanceOfSatisfying(BusinessException.class, ex -> {
+            assertThat(ex.getErrorCode()).isEqualTo(CommonErrorCode.INVALID_REQUEST);
+            assertThat(ex.getErrors()).extracting(e -> e.code()).containsExactly(code);
+        });
+    }
+
+    @Test
+    @DisplayName("[ENE-02.02][BR-ENE-10] 현재 상태: 15분 안의 값만 쓰고, 정원 4명 이하 공간은 인원 구간 없이 사용 중")
+    void occupancyCurrent() {
+        given(repo.geometry(1, 31)).willReturn(Optional.of(new SpaceGeometry(31, "101", null, null, 4, "Asia/Seoul")));
+        given(repo.inputDevices(1, 31, "LAeq")).willReturn(List.of(3002L));
+        given(repo.list(1, 31)).willReturn(List.of(new ConfigRow(31, "OCCUPANCY", true, "{\"inputs\":[\"co2\",\"noise\"]}",
+                List.of("occupancy_est"), "OK", null, NOW, 0, NOW)));
+        given(repo.findVirtualDevice(1, 31)).willReturn(Optional.of(9001L));
+        given(repo.latestDerived(1, 9001, "occupancy_est")).willReturn(Optional.of(new VirtualSensorRepository.DerivedPoint(NOW.minusSeconds(300), 1)));
+        var view = service.list("31").get(1);
+        assertThat(view.kind()).isEqualTo("OCCUPANCY");
+        assertThat(view.current().state()).isEqualTo("OCCUPIED");
+        assertThat(view.current().band()).isNull();
+        given(repo.latestDerived(1, 9001, "occupancy_est")).willReturn(Optional.of(new VirtualSensorRepository.DerivedPoint(NOW.minusSeconds(1200), 1)));
+        assertThat(service.list("31").get(1).current().state()).isEqualTo("UNKNOWN");
     }
 }
