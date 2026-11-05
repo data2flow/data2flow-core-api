@@ -57,7 +57,7 @@ class VirtualSensorControllerWebTest {
 
     private static SensorView view(boolean enabled) {
         return new SensorView("ACH", enabled, JsonMapper.builder().build().readTree("{\"outdoorCo2Ppm\":420}"), List.of("ach", "ventilation_m3h"),
-                List.of(new Input("co2", true, List.of("3001"))), AT, enabled ? "OK" : "DISABLED", null, 150.0);
+                List.of(new Input("co2", true, List.of("3001"), "co2", true)), AT, enabled ? "OK" : "DISABLED", null, 150.0, null, null);
     }
 
     @Test

@@ -150,7 +150,7 @@ public class SourceHealthRepository {
         Long org = restriction.isPresent() ? restriction.getAsLong() : null;
         return jdbc.sql("""
                         SELECT id, organization_id, no_data_alarm_after_sec FROM data2flow_core.data_sources
-                         WHERE lifecycle = 'ACTIVE' AND (CAST(:org AS bigint) IS NULL OR organization_id = :org) ORDER BY id""")
+                         WHERE lifecycle = 'ACTIVE' AND type <> 'DERIVED' AND (CAST(:org AS bigint) IS NULL OR organization_id = :org) ORDER BY id""")
                 .param("org", org)
                 .query((rs, n) -> new ActiveSource(rs.getLong("organization_id"), rs.getLong("id"), rs.getInt("no_data_alarm_after_sec")))
                 .list();

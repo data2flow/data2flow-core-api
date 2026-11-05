@@ -12,16 +12,21 @@ import net.java21.data2flow.core.analytics.service.AnalyticsClient;
 import net.java21.data2flow.core.audit.service.Audits;
 import net.java21.data2flow.core.common.AfterCommit;
 import net.java21.data2flow.core.energy.domain.EnergyErrorCode;
+import net.java21.data2flow.core.energy.domain.OccupancyExposurePolicy;
 import net.java21.data2flow.core.energy.dto.EnergyInternalDtos.VirtualSensorEntry;
 import net.java21.data2flow.core.energy.dto.EnergyInternalDtos.VirtualSensorInput;
 import net.java21.data2flow.core.energy.dto.VirtualSensorDtos.AchDay;
 import net.java21.data2flow.core.energy.dto.VirtualSensorDtos.AchSeries;
 import net.java21.data2flow.core.energy.dto.VirtualSensorDtos.DecayWindow;
 import net.java21.data2flow.core.energy.dto.VirtualSensorDtos.Input;
+import net.java21.data2flow.core.energy.dto.VirtualSensorDtos.OccupancyNow;
+import net.java21.data2flow.core.energy.dto.VirtualSensorDtos.OccupancyPoint;
+import net.java21.data2flow.core.energy.dto.VirtualSensorDtos.OccupancySeries;
 import net.java21.data2flow.core.energy.dto.VirtualSensorDtos.SensorView;
 import net.java21.data2flow.core.energy.dto.VirtualSensorDtos.UpdateRequest;
 import net.java21.data2flow.core.energy.repository.VirtualSensorRepository;
 import net.java21.data2flow.core.energy.repository.VirtualSensorRepository.ConfigRow;
+import net.java21.data2flow.core.energy.repository.VirtualSensorRepository.DerivedPoint;
 import net.java21.data2flow.core.energy.repository.VirtualSensorRepository.EnabledRow;
 import net.java21.data2flow.core.energy.repository.VirtualSensorRepository.SpaceGeometry;
 import org.springframework.http.HttpMethod;
@@ -46,7 +51,8 @@ import java.util.Set;
 import static net.java21.data2flow.core.energy.service.EnergyAccess.invalid;
 
 /**
- * 공간 가상 센서(ENE-02.01 환기율 ACH, API-ENE-20·21, UC-ENE-06, BR-ENE-09). 계산은 analytics가 매일 하고 결과는 EVT-ENE-03으로 받는다.
+ * 공간 가상 센서(ENE-02.01 환기율 ACH, ENE-02.02 재실 추정, API-ENE-20~22, UC-ENE-06·07, BR-ENE-09·10). 계산은 analytics가 하고(ACH 매일,
+ * 재실 5분마다) 결과는 EVT-ENE-03으로 받는다. 재실 추정 값은 공간 가상 기기의 측정 항목 {@code occupancy_est}로 저장된다(pipeline API-ING-25).
  * <ul>
  *   <li>조회 ENE_READ, 변경 ENE_ADMIN. 범위 밖·없는 공간은 404 SPACE_NOT_FOUND</li>
  *   <li>ACH를 켜려면 공간 면적·층고(부피)가 있어야 하고(409 ENE_SPACE_VOLUME_REQUIRED), 공간에 CO2 기기가 있어야 한다
@@ -63,6 +69,22 @@ public class VirtualSensorService {
     static final String CO2 = "co2";
     static final List<String> ACH_OUTPUTS = List.of("ach", "ventilation_m3h");
     static final int MAX_RANGE_DAYS = 366;
+    static final String OCCUPANCY = "OCCUPANCY";
+    static final String OCCUPANCY_METRIC = "occupancy_est";
+    static final List<String> OCCUPANCY_OUTPUTS = List.of(OCCUPANCY_METRIC);
+    /** 재실 추정 입력 신호 → 측정 키(BuiltinCatalog: activity=PIR, LAeq=등가 소음, illumination=조도) */
+    static final Map<String, String> SIGNALS = new LinkedHashMap<>();
+    static {
+        SIGNALS.put("pir", "activity");
+        SIGNALS.put("co2", CO2);
+        SIGNALS.put("noise", "LAeq");
+        SIGNALS.put("illuminance", "illumination");
+    }
+    static final List<String> DEFAULT_SIGNALS = List.of("pir", "co2", "noise");
+    static final int MIN_SIGNALS = 2;
+    /** 이보다 오래된 재실 추정은 현재 상태로 쓰지 않는다(UNKNOWN) */
+    static final java.time.Duration STALE = java.time.Duration.ofMinutes(15);
+    static final int MAX_OCCUPANCY_DAYS = 31;
     private static final Set<String> ACH_PARAMS = Set.of("outdoorCo2Mode", "outdoorCo2Ppm", "minDecayMinutes");
 
     private final VirtualSensorRepository repo;
@@ -93,7 +115,7 @@ public class VirtualSensorService {
         SpaceGeometry geometry = repo.geometry(orgId, space).orElseThrow(() -> new BusinessException(EnergyErrorCode.SPACE_NOT_FOUND));
         Map<String, ConfigRow> rows = new LinkedHashMap<>();
         repo.list(orgId, space).forEach(r -> rows.put(r.kind(), r));
-        return List.of(view(orgId, space, ACH, rows.get(ACH), geometry));
+        return List.of(view(orgId, space, ACH, rows.get(ACH), geometry), view(orgId, space, OCCUPANCY, rows.get(OCCUPANCY), geometry));
     }
 
     @Transactional
@@ -105,18 +127,27 @@ public class VirtualSensorService {
         if (body == null || body.enabled() == null) {
             throw invalid(CommonErrorCode.INVALID_REQUEST, "enabled", "NotNull");
         }
-        ObjectNode params = achParams(body.params());
+        boolean ach = ACH.equals(kind);
+        ObjectNode params = ach ? achParams(body.params()) : occupancyParams(body.params());
         SpaceGeometry geometry = repo.geometry(orgId, space).orElseThrow(() -> new BusinessException(EnergyErrorCode.SPACE_NOT_FOUND));
-        if (body.enabled()) {
+        Instant now = clock.instant();
+        if (body.enabled() && ach) {
             if (geometry.volumeM3() == null) {
                 throw new BusinessException(EnergyErrorCode.ENE_SPACE_VOLUME_REQUIRED);
             }
             if (repo.inputDevices(orgId, space, CO2).isEmpty()) {
                 throw new BusinessException(EnergyErrorCode.ENE_VIRTUAL_SENSOR_INPUT_MISSING, List.of(new FieldErrorDetail("inputs", CO2, null)));
             }
+        } else if (body.enabled()) {
+            List<String> selected = signals(params);
+            List<String> missing = selected.stream().filter(sig -> repo.inputDevices(orgId, space, SIGNALS.get(sig)).isEmpty()).toList();
+            if (selected.size() - missing.size() < MIN_SIGNALS) {
+                throw new BusinessException(EnergyErrorCode.ENE_VIRTUAL_SENSOR_INPUT_MISSING,
+                        missing.stream().map(sig -> new FieldErrorDetail("inputs", sig, null)).toList());
+            }
+            repo.ensureVirtualDevice(orgId, space, geometry.name(), user.userId(), now);
         }
-        Instant now = clock.instant();
-        repo.upsert(orgId, space, kind, body.enabled(), json.writeValueAsString(params), ACH_OUTPUTS, user.userId(), now);
+        repo.upsert(orgId, space, kind, body.enabled(), json.writeValueAsString(params), ach ? ACH_OUTPUTS : OCCUPANCY_OUTPUTS, user.userId(), now);
         audits.record(audits.event(orgId, EnergyAuditCodes.ENE_VIRTUAL_SENSOR_CHANGED).actor(user).target("SPACE", Long.toString(space))
                 .detail("kind", kind).detail("enabled", body.enabled().toString()));
         events.configChanged(orgId, Scope.VIRTUAL_SENSOR, space);
@@ -151,6 +182,30 @@ public class VirtualSensorService {
         return new AchSeries(Long.toString(space), volume, outdoor, items);
     }
 
+    /**
+     * API-ENE-22 재실 추정 이력: 공간 가상 기기의 {@code occupancy_est}를 노출 규칙(BR-ENE-10)으로 바꿔 돌려준다. 숫자 필드는 없다.
+     * 기간은 31일 이내(기본 최근 24시간)
+     */
+    @Transactional(readOnly = true)
+    public OccupancySeries occupancy(String spaceId, String from, String to) {
+        long orgId = roleChecker.currentUser().organizationId();
+        long space = space(Permission.ENE_READ, orgId, spaceId);
+        Instant end = to == null || to.isBlank() ? clock.instant() : instantParam("to", to);
+        Instant start = from == null || from.isBlank() ? end.minus(java.time.Duration.ofDays(1)) : instantParam("from", from);
+        if (!end.isAfter(start) || java.time.Duration.between(start, end).toDays() >= MAX_OCCUPANCY_DAYS) {
+            throw invalid(CommonErrorCode.INVALID_REQUEST, "to", "Range");
+        }
+        SpaceGeometry geometry = repo.geometry(orgId, space).orElseThrow(() -> new BusinessException(EnergyErrorCode.SPACE_NOT_FOUND));
+        List<OccupancyPoint> items = new ArrayList<>();
+        repo.findVirtualDevice(orgId, space).ifPresent(device -> {
+            for (DerivedPoint p : repo.derived(orgId, device, OCCUPANCY_METRIC, start, end)) {
+                OccupancyExposurePolicy.Exposure e = OccupancyExposurePolicy.expose(p.value(), geometry.capacity());
+                items.add(new OccupancyPoint(p.time(), e.state(), e.band()));
+            }
+        });
+        return new OccupancySeries(Long.toString(space), true, items);
+    }
+
     /** EVT-ENE-03: 마지막 계산 시각·상태. 설정이 없으면 false */
     @Transactional
     public boolean onUpdated(long orgId, EnergyVirtualSensorUpdated e, Instant at) {
@@ -163,16 +218,77 @@ public class VirtualSensorService {
         List<VirtualSensorEntry> out = new ArrayList<>();
         for (EnabledRow r : repo.enabled(orgId)) {
             ConfigRow c = r.config();
-            List<String> devices = repo.inputDevices(orgId, c.spaceId(), CO2).stream().map(String::valueOf).toList();
-            out.add(new VirtualSensorEntry(Long.toString(c.spaceId()), c.kind(), true, json.readTree(c.paramsJson()), c.outputMetrics(),
-                    r.space().timezone(), r.space().volumeM3(), List.of(new VirtualSensorInput(CO2, devices))));
+            JsonNode params = json.readTree(c.paramsJson());
+            if (ACH.equals(c.kind())) {
+                List<String> devices = repo.inputDevices(orgId, c.spaceId(), CO2).stream().map(String::valueOf).toList();
+                out.add(new VirtualSensorEntry(Long.toString(c.spaceId()), c.kind(), true, params, c.outputMetrics(),
+                        r.space().timezone(), r.space().volumeM3(), List.of(new VirtualSensorInput(CO2, devices, CO2)), null));
+            } else if (OCCUPANCY.equals(c.kind())) {
+                Long device = repo.findVirtualDevice(orgId, c.spaceId()).orElse(null);
+                if (device == null) {
+                    continue;  // 켤 때 만들므로 보통 없을 수 없다(기기를 지운 경우) — 다시 켜면 생긴다
+                }
+                List<VirtualSensorInput> inputs = new ArrayList<>();
+                for (String sig : signals(params)) {
+                    String key = SIGNALS.get(sig);
+                    inputs.add(new VirtualSensorInput(key, repo.inputDevices(orgId, c.spaceId(), key).stream().map(String::valueOf).toList(), sig));
+                }
+                out.add(new VirtualSensorEntry(Long.toString(c.spaceId()), c.kind(), true, params, c.outputMetrics(), r.space().timezone(),
+                        r.space().volumeM3(), inputs, Long.toString(device)));
+            }
         }
         return out;
     }
 
     private SensorView view(long orgId, long space, String kind, ConfigRow row, SpaceGeometry geometry) {
+        return ACH.equals(kind) ? achView(orgId, space, row, geometry) : occupancyView(orgId, space, row, geometry);
+    }
+
+    private SensorView occupancyView(long orgId, long space, ConfigRow row, SpaceGeometry geometry) {
+        boolean enabled = row != null && row.enabled();
+        JsonNode params = row == null ? occupancyParams(null) : json.readTree(row.paramsJson());
+        List<String> selected = signals(params);
+        List<Input> inputs = new ArrayList<>();
+        int available = 0;
+        for (Map.Entry<String, String> e : SIGNALS.entrySet()) {
+            List<Long> devices = repo.inputDevices(orgId, space, e.getValue());
+            boolean chosen = selected.contains(e.getKey());
+            if (chosen && !devices.isEmpty()) {
+                available++;
+            }
+            inputs.add(new Input(e.getValue(), !devices.isEmpty(), devices.stream().map(String::valueOf).toList(), e.getKey(), chosen));
+        }
+        String status;
+        List<String> missing = null;
+        if (!enabled) {
+            status = "DISABLED";
+        } else if (available < MIN_SIGNALS) {
+            status = "INPUT_MISSING";
+            missing = inputs.stream().filter(i -> i.selected() && !i.available()).map(Input::signal).toList();
+        } else if ("INPUT_MISSING".equals(row.lastStatus())) {
+            status = "INPUT_MISSING";
+            missing = row.lastMissing();
+        } else {
+            status = "OK";
+        }
+        Long device = repo.findVirtualDevice(orgId, space).orElse(null);
+        OccupancyNow current = null;
+        if (enabled) {
+            DerivedPoint latest = device == null ? null : repo.latestDerived(orgId, device, OCCUPANCY_METRIC).orElse(null);
+            if (latest == null || latest.time().isBefore(clock.instant().minus(STALE))) {
+                current = new OccupancyNow(OccupancyExposurePolicy.UNKNOWN, null, latest == null ? null : latest.time());
+            } else {
+                OccupancyExposurePolicy.Exposure e = OccupancyExposurePolicy.expose(latest.value(), geometry.capacity());
+                current = new OccupancyNow(e.state(), e.band(), latest.time());
+            }
+        }
+        return new SensorView(OCCUPANCY, enabled, params, OCCUPANCY_OUTPUTS, inputs, row == null ? null : row.lastComputedAt(), status, missing,
+                geometry.volumeM3(), device == null ? null : Long.toString(device), current);
+    }
+
+    private SensorView achView(long orgId, long space, ConfigRow row, SpaceGeometry geometry) {
         List<Long> devices = repo.inputDevices(orgId, space, CO2);
-        List<Input> inputs = List.of(new Input(CO2, !devices.isEmpty(), devices.stream().map(String::valueOf).toList()));
+        List<Input> inputs = List.of(new Input(CO2, !devices.isEmpty(), devices.stream().map(String::valueOf).toList(), CO2, true));
         boolean enabled = row != null && row.enabled();
         JsonNode params = row == null ? achParams(null) : json.readTree(row.paramsJson());
         String status;
@@ -188,8 +304,8 @@ public class VirtualSensorService {
         } else {
             status = "OK";
         }
-        return new SensorView(kind, enabled, params, ACH_OUTPUTS, inputs, row == null ? null : row.lastComputedAt(), status, missing,
-                geometry.volumeM3());
+        return new SensorView(ACH, enabled, params, ACH_OUTPUTS, inputs, row == null ? null : row.lastComputedAt(), status, missing,
+                geometry.volumeM3(), null, null);
     }
 
     private long space(Permission permission, long orgId, String raw) {
@@ -201,13 +317,13 @@ public class VirtualSensorService {
         return id;
     }
 
-    /** 경로의 kind(대소문자 무관). 재실·열쾌적(ENE-02.02·02.03)은 아직 받지 않는다 */
+    /** 경로의 kind(대소문자 무관). 열쾌적(ENE-02.03)은 아직 받지 않는다 */
     static String kind(String raw) {
         String kind = raw == null ? "" : raw.strip().toUpperCase(Locale.ROOT);
         if (!Set.of("ACH", "OCCUPANCY", "THERMAL_COMFORT").contains(kind)) {
             throw invalid(CommonErrorCode.INVALID_REQUEST, "kind", "INVALID");
         }
-        if (!ACH.equals(kind)) {
+        if ("THERMAL_COMFORT".equals(kind)) {
             throw invalid(CommonErrorCode.INVALID_REQUEST, "kind", "NOT_SUPPORTED");
         }
         return kind;
@@ -240,6 +356,72 @@ public class VirtualSensorService {
         out.put("outdoorCo2Ppm", ppm);
         out.put("minDecayMinutes", (int) minutes);
         return out;
+    }
+
+    /** 재실 추정 설정 {@code {inputs: [pir|co2|noise|illuminance] 2~4개, 중복 없음(기본 pir·co2·noise)}} */
+    ObjectNode occupancyParams(JsonNode in) {
+        if (in != null && !in.isNull() && !in.isObject()) {
+            throw invalid(CommonErrorCode.INVALID_REQUEST, "params", "Type");
+        }
+        List<FieldErrorDetail> errors = new ArrayList<>();
+        List<String> signals = new ArrayList<>();
+        if (in != null && in.isObject()) {
+            for (String key : in.propertyNames()) {
+                if (!"inputs".equals(key)) {
+                    errors.add(new FieldErrorDetail("params." + key, "UNKNOWN", null));
+                }
+            }
+            JsonNode inputs = in.get("inputs");
+            if (inputs != null && !inputs.isNull()) {
+                if (!inputs.isArray()) {
+                    errors.add(new FieldErrorDetail("params.inputs", "Type", null));
+                } else {
+                    for (JsonNode v : inputs) {
+                        String sig = v.isString() ? v.asString().strip().toLowerCase(Locale.ROOT) : "";
+                        if (!SIGNALS.containsKey(sig)) {
+                            errors.add(new FieldErrorDetail("params.inputs", "INVALID", String.join(",", SIGNALS.keySet())));
+                        } else if (signals.contains(sig)) {
+                            errors.add(new FieldErrorDetail("params.inputs", "DUPLICATE", sig));
+                        } else {
+                            signals.add(sig);
+                        }
+                    }
+                    if (errors.isEmpty() && signals.size() < MIN_SIGNALS) {
+                        errors.add(new FieldErrorDetail("params.inputs", "Size", MIN_SIGNALS + "~" + SIGNALS.size()));
+                    }
+                }
+            }
+        }
+        if (!errors.isEmpty()) {
+            throw new BusinessException(CommonErrorCode.INVALID_REQUEST, errors);
+        }
+        if (signals.isEmpty()) {
+            signals.addAll(DEFAULT_SIGNALS);
+        }
+        ObjectNode out = json.createObjectNode();
+        var arr = out.putArray("inputs");
+        SIGNALS.keySet().stream().filter(signals::contains).forEach(arr::add);  // 정해진 순서로
+        return out;
+    }
+
+    /** 저장된 재실 추정 설정의 신호(모르는 값은 버림) */
+    static List<String> signals(JsonNode params) {
+        List<String> out = new ArrayList<>();
+        for (JsonNode v : params.path("inputs")) {
+            String sig = v.asString("");
+            if (SIGNALS.containsKey(sig) && !out.contains(sig)) {
+                out.add(sig);
+            }
+        }
+        return out;
+    }
+
+    private static Instant instantParam(String field, String raw) {
+        try {
+            return java.time.OffsetDateTime.parse(raw.strip()).toInstant();
+        } catch (DateTimeParseException ex) {
+            throw invalid(CommonErrorCode.INVALID_REQUEST, field, "DateTime");
+        }
     }
 
     private static double range(JsonNode in, String key, double fallback, double min, double max, boolean integer, List<FieldErrorDetail> errors) {

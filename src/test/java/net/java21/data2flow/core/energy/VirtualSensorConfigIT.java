@@ -141,4 +141,61 @@ class VirtualSensorConfigIT extends AnalyticsItSupport {
         assertThat(outbox("energy.config.changed")).isZero();
         assertThat(STUB.received("POST", RELOAD)).isEmpty();
     }
+
+    @Test
+    @DisplayName("[ENE-02.02][TC-ENE-041] 재실 추정: 신호 2개 이상이면 켜지고 공간 가상 기기가 생긴다. 설정 묶음에 입력·출력 기기, 조회는 상태만(숫자 없음)")
+    void occupancy() throws Exception {
+        data.metric(org, "activity", null);
+        long pirModel = data.model(org, "PIR", List.of("activity"));
+        long pir = data.device(org, data.source(org, "pir"), "pir-1", "ACTIVE", room, pirModel);
+        String on = "{\"enabled\":true,\"params\":{\"inputs\":[\"pir\",\"co2\"]}}";
+        mvc.perform(as(org, admin, json(put(path(empty) + "/occupancy"), on))).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.header.resultCode").value("ENE_VIRTUAL_SENSOR_INPUT_MISSING"));
+
+        String body = mvc.perform(as(org, admin, json(put(path(room) + "/occupancy"), on))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.response.kind").value("OCCUPANCY")).andExpect(jsonPath("$.response.status").value("OK"))
+                .andExpect(jsonPath("$.response.outputMetrics[0]").value("occupancy_est"))
+                .andExpect(jsonPath("$.response.current.state").value("UNKNOWN"))
+                .andReturn().getResponse().getContentAsString();
+        String device = json.readTree(body).path("response").path("outputDeviceId").asString();
+        assertThat(device).isNotBlank();
+        assertThat(jdbc.sql("""
+                        SELECT s.type FROM data2flow_core.devices d JOIN data2flow_core.data_sources s ON s.id = d.source_id
+                         WHERE d.id = :id AND d.space_id = :space AND NOT d.is_virtual AND d.status = 'ACTIVE'""")
+                .param("id", Long.parseLong(device)).param("space", room).query(String.class).single()).isEqualTo("DERIVED");
+        // 다시 켜도 기기는 하나
+        mvc.perform(as(org, admin, json(put(path(room) + "/occupancy"), on))).andExpect(jsonPath("$.response.outputDeviceId").value(device));
+
+        mvc.perform(get("/internal/core/energy/config?orgId=" + org).header("X-CALLER-SERVICE", "data2flow-analytics")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.response.virtualSensors", hasSize(1)))
+                .andExpect(jsonPath("$.response.virtualSensors[0].kind").value("OCCUPANCY"))
+                .andExpect(jsonPath("$.response.virtualSensors[0].outputDeviceId").value(device))
+                .andExpect(jsonPath("$.response.virtualSensors[0].inputs[0].signal").value("pir"))
+                .andExpect(jsonPath("$.response.virtualSensors[0].inputs[0].metricKey").value("activity"))
+                .andExpect(jsonPath("$.response.virtualSensors[0].inputs[0].deviceIds[0]").value(Long.toString(pir)))
+                .andExpect(jsonPath("$.response.virtualSensors[0].inputs[1].metricKey").value("co2"));
+
+        // analytics가 pipeline에 저장한 계산값(추정 2명 상당이라도 0/1만 온다)
+        Instant now = clock.instant();
+        for (int i = 0; i < 3; i++) {
+            jdbc.sql("""
+                            INSERT INTO data2flow_pipeline.telemetry (device_id, metric_key, time, organization_id, value, quality, flags, received_at)
+                            VALUES (:d, 'occupancy_est', :t, :org, :v, 0, 16, :t)""")
+                    .param("d", Long.parseLong(device)).param("t", net.java21.data2flow.core.common.Pg.ts(now.minusSeconds(900 - 300L * i)))
+                    .param("org", org).param("v", i == 0 ? 0.0 : 1.0).update();
+        }
+        mvc.perform(as(org, viewer, get(path(room)))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.response[1].kind").value("OCCUPANCY"))
+                .andExpect(jsonPath("$.response[1].current.state").value("OCCUPIED"))
+                .andExpect(jsonPath("$.response[1].current.band").doesNotExist());
+        String series = mvc.perform(as(org, viewer, get("/core/energy/spaces/" + room + "/occupancy"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.response.estimated").value(true))
+                .andExpect(jsonPath("$.response.items", hasSize(3)))
+                .andExpect(jsonPath("$.response.items[0].state").value("VACANT"))
+                .andExpect(jsonPath("$.response.items[2].state").value("OCCUPIED"))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(json.readTree(series).path("response").path("items").toString()).doesNotContain("value").doesNotContainPattern("\"band\":\\s*\"\\d");
+        mvc.perform(as(org, viewer, get("/core/energy/spaces/" + room + "/occupancy").param("from", "2026-10-01T00:00:00Z")
+                .param("to", "2026-11-05T00:00:00Z"))).andExpect(status().isBadRequest());
+    }
 }

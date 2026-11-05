@@ -31,11 +31,13 @@ public final class EnergyInternalDtos {
     }
 
     /** 켜진 가상 센서 하나. volumeM3는 면적 × 층고, timezone은 사이트(없으면 조직) 시간대, inputs는 공간에 놓인 입력 기기 */
+    /** 켜진 가상 센서 하나. outputDeviceId는 계산값을 저장할 공간 가상 기기(재실 추정, pipeline API-ING-25). ACH는 null */
     public record VirtualSensorEntry(String spaceId, String kind, boolean enabled, JsonNode params, List<String> outputMetrics, String timezone,
-                                     Double volumeM3, List<VirtualSensorInput> inputs) {
+                                     Double volumeM3, List<VirtualSensorInput> inputs, String outputDeviceId) {
     }
 
-    public record VirtualSensorInput(String metricKey, List<String> deviceIds) {
+    /** 입력 하나: signal은 재실 추정 입력 신호(pir·co2·noise·illuminance, ACH는 co2), metricKey는 그 신호의 측정 키 */
+    public record VirtualSensorInput(String metricKey, List<String> deviceIds, String signal) {
     }
 
     /** 켜진 원천이나 가상 센서가 있는 조직(일 계산 대상) */
